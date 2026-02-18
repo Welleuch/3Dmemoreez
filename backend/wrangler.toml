@@ -1,0 +1,23 @@
+name = "3d-memoreez-orchestrator"
+main = "src/index.js"
+compatibility_date = "2024-03-18"
+
+[vars]
+# Add non-secret configuration variables here
+# RUNPOD_ENDPOINT_ID = "your-endpoint-id"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "3d_memoreez_db"
+database_id = "523fa7d4-eb3c-4310-aabc-a591fb5bc0fb"
+
+[[r2_buckets]]
+binding = "ASSETS_BUCKET"
+bucket_name = "3d-memoreez-assets"
+
+# AI Bindings (Cloudflare AI)
+[ai]
+binding = "AI"
+
+[observability]
+enabled = true
