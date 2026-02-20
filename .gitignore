@@ -33,3 +33,29 @@ dist
 # Temporary files
 tmp
 temp
+
+# Python
+backend/ai_engine/venv/
+backend/ai_engine/__pycache__/
+backend/ai_engine/**/__pycache__/
+backend/ai_engine/**/*.pyc
+backend/ai_engine/**/*.pyo
+*.pyc
+*.pyo
+__pycache__/
+
+# Model weights (too large for git)
+backend/ai_engine/models/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+
+# Generated STL outputs
+output_*.stl
+test_result.stl
+
+# Python test artifacts
+.pytest_cache/
+*.egg-info/

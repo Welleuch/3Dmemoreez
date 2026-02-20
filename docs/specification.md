@@ -10,14 +10,38 @@ To create a seamless "Sentiment-to-Physical" pipeline that prioritizes joyful an
 
 | Layer | Technology |
 | --- | --- |
-| **Frontend** | React (Cloudflare Pages) + React Three Fiber (R3F) |
+| **Frontend** | React (Cloudflare Pages: [3dmemoreez.pages.dev](https://3dmemoreez.pages.dev)) + React Three Fiber (R3F) |
 | **3D Geometry Engine** | **Manifold (WASM)** |
 | **AI Orchestration** | Cloudflare Workers (Llama 3 + Flux Schnell) |
-| **Heavy AI Compute** | RunPod Serverless (Hunyuan3D-DiT-v2) |
+| **Heavy AI Compute** | Standalone Python Server (Hunyuan3D-V2-FP16) - ComfyUI Decoupled |
 | **Slicing Engine** | PrusaSlicer CLI (Containerized on RunPod) |
 | **Storage & DB** | Cloudflare R2 (Files) & Cloudflare D1 (State/Orders) |
+| **Dev Bridge** | Localtunnel (HTTPS) -> Docker/Localhost:8000 |
 
-## 3. The AI Engine: FDM-Friendly Generation
+## 3. The AI Engine: Mandatory GPU Architecture
+
+To support high-end GPUs like the **RTX 40 series (Ada Lovelace, `sm_89`)** and the **RTX 50 series (Blackwell, `sm_120`)**, we use a specialized containerized architecture targeting the latest CUDA kernels. **GPU execution is mandatory; CPU fallback is strictly disabled.**
+
+### 3.1 Docker Environment
+*   **Base Image:** `python:3.10-slim` + PyTorch Nightly (`torch-2.7.0.dev+cu128`) wheels
+*   **Port:** Exposes `8000` mapped to host.
+*   **Model Storage:**
+    *   **Local Dev:** Mounts local `.safetensors` file via `docker-compose.yml` (Volume).
+    *   **RunPod:** Downloads from Network Volume at cold-start (to be implemented).
+*   **Inference Pipeline (3-Stage):**
+    1.  **Stage 1 — DiT Diffusion:** `Hunyuan3DDiTFlowMatchingPipeline` runs 50 denoising steps → raw latents `[1, 3072, 64]` (~34s)
+    2.  **Stage 2 — VAE Forward:** `ShapeVAE.forward()` applies `post_kl` linear + transformer → processed latents `[1, 3072, 1024]` (<1s). Latents are unscaled by `scale_factor=0.9990943` before this step.
+    3.  **Stage 3 — Volume Decode:** `latents2mesh()` fires a 256³ grid query via `geo_decoder`, runs marching cubes at `mc_level=-1/512` → STL (~20s)
+*   **Total generation time: ~55s** (octree_resolution=256), ~37s (octree_resolution=128)
+*   **Networking:**
+    *   **Tunnel:** `localtunnel` exposes `localhost:8000` to public HTTPS.
+    *   **Worker:** Connects to Tunnel URL defined in `backend/src/index.js`.
+*   **Hardware Compatibility:**
+    *   **Architecture:** Targets `sm_89` (RTX 4090) and `sm_120` (RTX 5090).
+    *   **Driver:** Requires r550+ for Blackwell support.
+    *   **PyTorch:** Uses Nightly Builds (`torch-2.7+cu128`) for bleeding-edge `sm_120` kernel support.
+
+## 4. FDM-Friendly Generation Strategy
 
 To ensure the gifts are printable with **Gray PLA** on **Prusa FDM printers**, the Llama 3 worker uses a highly specific system prompt to guide the Flux image generator.
 
@@ -124,7 +148,9 @@ Once payment is confirmed, the system automates the handover to your workshop:
 
 ### Implementation Order
 
-1. **Phase 1:** Build the Cloudflare Worker pipeline (Llama -> Flux) and basic React UI.
-2. **Phase 2:** Deploy the RunPod Hunyuan3D v2 endpoint and implement the Webhook listener.
-3. **Phase 3:** Integrate **Manifold WASM** in the frontend for the pedestal and engraving logic.
-4. **Phase 4:** Connect the PrusaSlicer CLI on RunPod for final G-code and price estimation.
+1.  **Phase 1:** Build the Cloudflare Worker pipeline (Llama → Flux) and basic React UI. (**✅ COMPLETE**)
+2.  **Phase 2:** Set up Local AI Engine Bridge on GPU (Hunyuan3D-V2-FP16). Refactored to be a standalone Python module, removing all ComfyUI dependencies. (**✅ COMPLETE**)
+3.  **Phase 3:** Dockerize and validate AI engine locally. Full mesh generation pipeline confirmed working end-to-end. Fixed 3 critical bugs (VAE device, VAE forward pass, mc_level). Production settings: `octree_resolution=256`, `mc_level=-1/512`. (**✅ COMPLETE**)
+4.  **Phase 4:** Deploy validated Docker image to RunPod Serverless. Add background removal preprocessing step. (**⏳ NEXT**)
+5.  **Phase 5:** Integrate **Manifold WASM** in the frontend for the pedestal and engraving logic.
+6.  **Phase 6:** Connect the PrusaSlicer CLI for final G-code and price estimation.

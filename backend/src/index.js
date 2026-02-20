@@ -1,5 +1,5 @@
 export default {
-    async fetch(request, env) {
+    async fetch(request, env, ctx) {
         const url = new URL(request.url);
 
         // CORS headers
@@ -55,13 +55,19 @@ Constraints for Printability:
 1. Base: Every object must have a clearly defined, flat, and wide structural base.
 2. Overhangs: Avoid any floating parts or angles steeper than 45 degrees. Use organic, tapered transitions.
 3. Thickness: Ensure no part of the model is thinner than 2.0mm. No "whisker" or "hair" textures.
-4. Style: Keywords: "Solid 3D sculpture, gray matte finish, flat base, manifold geometry, studio lighting, high contrast."
+4. Style: Keywords: "Solid 3D sculpture, gray matte finish, flat base, manifold geometry, studio lighting, high contrast, non-porous surface."
+
+Safety & Style Constraints:
+- NO HUMAN SKIN or Realistic Human Features.
+- Focus on STYLIZED FIGURINES, MONOLITHIC STATUES, or CLAY SCULPTURES.
+- Avoid any suggestive or visceral descriptions.
+- Use strictly object-centric language (e.g., "A stone-textured figurine of a swimmer" instead of "A realistic swimmer").
 
 Generate 4 concepts:
 - 2 Literal: Sturdy, fused mashups of the objects.
 - 2 Artistic: Solid, sculptural, low-poly or "clay-sculpted" aesthetic.
 
-CRITICAL: Return ONLY a raw JSON object. No conversational text. No "Here are the concepts". No markdown formatting.
+CRITICAL: Return ONLY a raw JSON object. No conversational text. No markdown formatting.
 Structure:
 {
   "concepts": [
@@ -100,7 +106,7 @@ Structure:
                 const generationPromises = result.concepts.map(async (concept) => {
                     try {
                         const fluxResponse = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
-                            prompt: concept.prompt
+                            prompt: concept.prompt,
                         });
 
                         if (!fluxResponse) {
@@ -116,7 +122,7 @@ Structure:
                             (typeof Uint8Array !== 'undefined' && fluxResponse instanceof Uint8Array)) {
                             binaryData = fluxResponse;
                         }
-                        // 2. Check if it's a Response object (common in some internal AI.run versions)
+                        // 2. Check if it's a Response object
                         else if (fluxResponse instanceof Response) {
                             binaryData = await fluxResponse.arrayBuffer();
                         }
@@ -130,20 +136,19 @@ Structure:
                             }
                             binaryData = bytes.buffer;
                         }
-                        // 4. Check for .arrayBuffer() method (e.g. if it's a custom stream-like object)
+                        // 4. Check for .arrayBuffer() method
                         else if (typeof fluxResponse.arrayBuffer === 'function') {
                             binaryData = await fluxResponse.arrayBuffer();
                         }
-                        // 5. Fallback: stringify or just try passing it (it will likely fail if it's a random object)
+                        // 5. Fallback
                         else {
-                            console.log("Unexpected fluxResponse type:", typeof fluxResponse);
                             binaryData = fluxResponse;
                         }
 
                         const assetId = crypto.randomUUID();
                         const safeKey = `concepts___${sessionId}___${assetId}.png`;
 
-                        // Store in R2
+                        // Store binaryData directly in R2 (Removed bg-removal for stability)
                         await env.ASSETS_BUCKET.put(safeKey, binaryData, {
                             httpMetadata: { contentType: "image/png" }
                         });
@@ -176,17 +181,132 @@ Structure:
                 });
             }
 
-            // 4. Handle Concept Selection
+            // 4. Handle Concept Selection & Trigger 3D Gen
             if (url.pathname === "/api/session/select" && request.method === "POST") {
-                const { session_id, concept_id } = await request.json();
+                const { session_id, concept_id, image_url } = await request.json();
 
+                // 1. Update Session Status in D1
                 await env.DB.prepare(
                     "UPDATE Sessions SET selected_concept_id = ?, current_step = 'view', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
                 ).bind(concept_id, session_id).run();
 
-                return new Response(JSON.stringify({ success: true }), {
+                // 2. Update Asset Status to 'processing'
+                await env.DB.prepare(
+                    "UPDATE Assets SET status = 'processing' WHERE session_id = ? AND image_url LIKE ?"
+                ).bind(session_id, `%${concept_id}%`).run();
+
+                // Fixed localtunnel subdomain — restart tunnel with: npx localtunnel --port 8000 --subdomain 3dmemoreez-ai
+                const AI_ENGINE_URL = "https://3dmemoreez-ai.loca.lt/generate-3d";
+                const WEBHOOK_URL = `${url.origin}/api/webhook/runpod`;
+
+                // Trigger 3D Engine
+                try {
+                    console.log("[AI-ENGINE] Triggering:", AI_ENGINE_URL);
+                    console.log("[AI-ENGINE] Webhook:", WEBHOOK_URL);
+                    const aiPromise = fetch(AI_ENGINE_URL, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "bypass-tunnel-reminder": "true",
+                            "x-tunnel-skip-interstitial": "true",
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        },
+                        body: JSON.stringify({
+                            image_url: image_url.startsWith('http') ? image_url : `${url.origin}${image_url}`,
+                            webhook_url: WEBHOOK_URL,
+                            session_id: session_id,
+                            asset_id: concept_id
+                        }),
+                        signal: AbortSignal.timeout(60000) // 60s timeout for the trigger call
+                    }).then(async r => {
+                        const txt = await r.text();
+                        console.log(`[AI-ENGINE] Response status: ${r.status}`);
+                        console.log(`[AI-ENGINE] Response body (first 500 chars): ${txt.substring(0, 500)}`);
+                        if (r.status !== 200) {
+                            console.error(`[AI-ENGINE] Non-200 response! Status: ${r.status}`);
+                        }
+                    }).catch(e => {
+                        console.error("[AI-ENGINE] Fetch exception:", e.message);
+                    });
+
+                    ctx.waitUntil(aiPromise);
+
+                } catch (err) {
+                    console.error("[AI-ENGINE] Trigger exception:", err.message);
+                }
+
+                return new Response(JSON.stringify({ success: true, message: "3D Generation Started" }), {
                     headers: { ...corsHeaders, "Content-Type": "application/json" },
                 });
+            }
+
+            // 5. Webhook Listener (from RunPod/Local AI)
+            if (url.pathname === "/api/webhook/runpod" && request.method === "POST") {
+                const formData = await request.formData();
+                const session_id = formData.get("session_id");
+                const asset_id = formData.get("asset_id");
+                const status = formData.get("status");
+                const file = formData.get("file");
+
+                if (status === "completed" && file) {
+                    const stlKey = `models___${session_id}___${asset_id}.stl`;
+
+                    // Store STL in R2
+                    await env.ASSETS_BUCKET.put(stlKey, await file.arrayBuffer(), {
+                        httpMetadata: { contentType: "model/stl" }
+                    });
+
+                    // Update D1 - Stricter matching
+                    await env.DB.prepare(
+                        "UPDATE Assets SET status = 'completed', stl_r2_path = ? WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
+                    ).bind(stlKey, session_id, asset_id, `%${asset_id}%`).run();
+
+                    return new Response("OK", { status: 200 });
+                } else {
+                    // Handle failure
+                    await env.DB.prepare(
+                        "UPDATE Assets SET status = 'failed' WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
+                    ).bind(session_id, asset_id, `%${asset_id}%`).run();
+                    return new Response("Failed", { status: 400 });
+                }
+            }
+
+            // 6. Polling Endpoint for Frontend
+            if (url.pathname === "/api/session/status" && request.method === "GET") {
+                const sessionId = url.searchParams.get("session_id");
+                const assetId = url.searchParams.get("asset_id");
+
+                let query = "SELECT status, stl_r2_path FROM Assets WHERE session_id = ?";
+                let params = [sessionId];
+
+                if (assetId) {
+                    query += " AND (id = ? OR image_url LIKE ?)";
+                    params.push(assetId, `%${assetId}%`);
+                } else {
+                    query += " AND status IN ('completed', 'processing', 'failed')";
+                }
+
+                query += " ORDER BY created_at DESC LIMIT 1";
+
+                const asset = await env.DB.prepare(query).bind(...params).first();
+
+                return new Response(JSON.stringify(asset || { status: 'not_started' }), {
+                    headers: { ...corsHeaders, "Content-Type": "application/json" },
+                });
+            }
+
+            // 7. Serve STL from R2
+            if (url.pathname.startsWith("/api/models/") && request.method === "GET") {
+                const key = url.pathname.split("/").pop();
+                const object = await env.ASSETS_BUCKET.get(key);
+
+                if (!object) {
+                    return new Response("Model Not Found", { status: 404, headers: corsHeaders });
+                }
+
+                const headers = new Headers(corsHeaders);
+                headers.set("Content-Type", "model/stl");
+                return new Response(object.body, { headers });
             }
 
             return new Response("Not Found", { status: 404, headers: corsHeaders });

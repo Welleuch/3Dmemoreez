@@ -23,7 +23,9 @@ const STEPS = [
     { id: 'checkout', title: 'Checkout', icon: CreditCard },
 ];
 
-const API_BASE_URL = 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev'; // Deployed Cloudflare Worker URL
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:8787'
+    : 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev';
 
 export default function App() {
     const [currentStep, setCurrentStep] = useState(0);
@@ -75,7 +77,8 @@ export default function App() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     session_id: sessionId,
-                    concept_id: concept.id
+                    concept_id: concept.id,
+                    image_url: concept.url
                 })
             });
         } catch (error) {
@@ -152,6 +155,7 @@ export default function App() {
                                 {currentStep === 2 && (
                                     <ThreeSceneViewer
                                         selectedConcept={selectedConcept}
+                                        sessionId={sessionId}
                                         onNext={nextStep}
                                         onBack={prevStep}
                                     />

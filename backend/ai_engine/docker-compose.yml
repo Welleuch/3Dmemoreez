@@ -1,0 +1,30 @@
+services:
+  ai-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Map the model inside the container. We map the external path directly
+      # NOTE: Replaced with the actual path on your Windows machine
+      - C:\Users\Administrator\Downloads\ComfyUI_windows_portable_nvidia\ComfyUI_windows_portable\ComfyUI\models\checkpoints\hunyuan3d-dit-v2_fp16.safetensors:/app/models/hunyuan3d-dit-v2_fp16.safetensors
+      # We map server.log for visibility
+      - ./server.log:/app/server.log
+      # Mount source code for hot reloading
+      - ./main.py:/app/main.py
+      - ./runpod_handler.py:/app/runpod_handler.py
+      - ./hy3dgen:/app/hy3dgen
+    ports:
+      - "8000:8000"
+    environment:
+      # We tell main.py where the model is mapped
+      - MODEL_PATH=/app/models/hunyuan3d-dit-v2_fp16.safetensors
+      - IS_DOCKER=true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    restart: unless-stopped
+    command: uvicorn main:app --host 0.0.0.0 --port 8000

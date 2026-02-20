@@ -1,0 +1,26 @@
+
+# AI Engine Requirements
+# NOTE: pytorch/torchvision/torchaudio are installed separately in Dockerfile to use Nightly Wheels.
+# We keep them here for local env compatibility but they might be skipped if satisfied.
+
+--extra-index-url https://download.pytorch.org/whl/nightly/cu128
+fastapi
+uvicorn
+python-multipart
+requests
+safetensors
+diffusers
+transformers
+accelerate
+trimesh
+numpy
+scipy
+mcubes
+rembg
+imageio
+pyyaml
+pymeshlab
+onnxruntime-gpu
+einops
+omegaconf
+imageio-ffmpeg

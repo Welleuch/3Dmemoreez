@@ -1,14 +1,4 @@
-## Phase 0: Infrastructure (Cloudflare Ecosystem)
-
-* [x] **Worker Orchestrator:** Initialize `wrangler` and create the primary backend worker.
-* [x] **Secret Management:** Configure Cloudflare Secrets via `wrangler secret put`.
-    *   [x] `RUNPOD_API_KEY` (Required for Phase 3)
-    *   [x] `RUNPOD_ENDPOINT_ID` (Required for Phase 3)
-* [x] **Database Setup:** Create the Cloudflare D1 instance (`3d_memoreez_db`) and run initial migrations.
-* [x] **Object Storage:** Initialize Cloudflare R2 buckets for STL and G-Code assets.
-* [ ] **Deployment Pipeline:** Connect the GitHub repository to Cloudflare Pages for automated CI/CD. (Dashboard step pending)
-
-## Phase 1: Foundation & Infrastructure
+ and add 
 
 * [x] **Initial Setup:** Initialize a Vite project with React and Tailwind CSS.
 * [x] **3D Environment:** Set up a basic `Canvas` using React Three Fiber and `@react-three/drei`.
@@ -32,14 +22,50 @@
 * [x] **Frontend Integration:** Create the `FactsInputForm` and the `ConceptCardGrid` to display generated images.
 * [x] **Selection State:** Save the user's selected image and session data to D1.
 
-## Phase 3: The 3D Sculptor (RunPod Pipeline)
+## Phase 3: The 3D Sculptor (AI 3D Pipeline)
 
-* **RunPod Serverless Setup:** Deploy a container for **Hunyuan3D-DiT-v2**.
-* **Async Communication:** * Implement the Webhook in a Cloudflare Worker to receive the `.obj/.stl` file.
-* Configure the frontend to poll the D1 database for the "Ready" status.
-
-
-* **Asset Management:** Ensure the generated mesh is uploaded from RunPod to Cloudflare R2 and served to the frontend.
+* [x] **Local GPU Bridge:** Build `main.py` FastAPI engine to bridge Hunyuan3D-DiT-v2.
+* [x] **CUDA Optimization:** Configure RTX 5060 + Torch 2.5.1+cu121 for specialized 3D inference.
+* [x] **ComfyUI Decoupling — COMPLETE:** Fully removed ComfyUI dependency from the Hunyuan3D engine.
+    *   [x] Vendorized `hy3dgen` package into `backend/ai_engine/hy3dgen/`.
+    *   [x] Replaced all ComfyUI-specific imports with pure Python equivalents (`tqdm`, `torch.cuda.empty_cache`, `tempfile`).
+    *   [x] Converted ALL relative imports to absolute imports across all 72 Python files.
+    *   [x] Fixed incorrect `hy3dgen.utils` → `hy3dgen.shapegen.utils` path in 3 autoencoder modules.
+    *   [x] Engine now loads and serves on `http://0.0.0.0:8000` with **zero ComfyUI dependencies**.
+* [x] **Public Bridge:** Set up `localtunnel` + `wrangler dev --remote` for end-to-end testing between Cloudflare and Local GPU.
+* [x] **Local GPU Resolution:** PIVOT to Docker Container to support high-end hardware.
+    *   [x] Create Dockerfile with `python:3.10-slim` base + PyTorch Nightly cu128 wheels.
+    *   [x] Create `docker-compose.yml` for local GPU passthrough.
+    *   [x] **Blackwell/Ada Hardware Support:** Resolve `sm_120` kernel mismatch for RTX 50/4090.
+        *   [x] Verify `torch.cuda.get_arch_list()` includes `sm_120`.
+        *   [x] **Disable CPU Fallback:** Hardcoded mandatory GPU access in `main.py`.
+* [x] **3-Stage Inference Pipeline Fixed — COMPLETE:** Three compounding bugs resolved.
+    *   [x] **Bug 1:** `vae.to(DEVICE)` after load — `from_single_file()` places VAE on CPU by default.
+    *   [x] **Bug 2:** `latents = vae(latents)` forward pass added — `post_kl + transformer` required before `latents2mesh()`.
+    *   [x] **Bug 3:** `mc_level=-1/512` — Hunyuan3D-specific isosurface level (NOT 0.0).
+    *   [x] `latents = latents / vae.scale_factor` applied before VAE forward pass.
+* [x] **Production Settings Validated:**
+    *   [x] `octree_resolution=256`, `mc_level=-1/512`, `num_chunks=8000`
+    *   [x] Output: **33.7 MB STL**, ~674k triangles, **~55s total generation time**
+* [x] **Automated Testing:** `test_docker_simulation.py` — pytest-based end-to-end test with local webhook server.
+    *   [x] Webhook receives STL binary, saves as `test_result.stl` on host.
+    *   [x] Assertion: file size > 100 bytes. `MAX_WAIT_TIME=300s`.
+* [x] **Async Communication:** Implement the Webhook in Cloudflare Worker and Python `requests` feedback.
+* [x] **Frontend Polling:** Updated frontend to poll D1 database for "completed" 3D status.
+* [x] **Asset Management:** Mesh uploading from local bridge to Cloudflare R2 via Webhook binary transfer.
+* [x] **Background Removal (Preprocessing):** `rembg` (U2Net) integrated into `main.py`. Super-Purge pipeline active.
+    *   [x] `rembg` U2Net session loaded at engine startup.
+    *   [x] Runs before pipeline call inside `process_3d()`.
+    *   [x] Alpha thresholding (200/255), 20px border clear, 75% subject scale, pure white sweep.
+    *   [ ] **Box artifact still present** — the background removal is working but Flux images have dark gradient backgrounds that rembg can't fully strip. **See SESSION_STATE.md.**
+    *   [ ] **NEXT: Fix upstream in Flux prompt** — force pure white studio background at image generation time. Then rembg will have trivial work to do.
+    *   [ ] Consider switching rembg model to `isnet-general-use` for cleaner edges.
+* [ ] **RunPod Serverless Deployment:** Push the verified Docker image to RunPod.
+    *   [ ] **Container Registry:** Push image to Docker Hub or RunPod Registry.
+    *   [ ] **Network Volume:** Mount `/workspace/models` for weights (avoid re-download every cold start).
+    *   [ ] **Startup Script:** Ensure fast cold-start using volume mount (`< 30s` target).
+    *   [ ] **Endpoint URL:** Wire RunPod endpoint URL into Cloudflare Worker secret (`RUNPOD_ENDPOINT_URL`).
+    *   [ ] **Removes localtunnel dependency** — the root cause of all "Failed to fetch" instability.
 
 ## Phase 4: The Geometry Studio (Local Customization)
 
