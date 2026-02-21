@@ -1,6 +1,8 @@
 # AI Engine — Technical Reference
 
 > Developer reference for `backend/ai_engine/`. Contains the full inference pipeline explanation, bug history, tuning parameters, and deployment notes.
+>
+> Last updated: 2026-02-21
 
 ---
 
@@ -88,9 +90,22 @@ vae.eval()
 **Root cause:** `mc_level=0.0` extracts the wrong isosurface from Hunyuan3D's occupancy field. The field was calibrated during training for level `-1/512`.  
 **Fix:** `mc_level=-1/512` (found in `pipelines.py` line ~505 in the commented-out `_export()` method).
 
----
+### Bug 4 — `logger` NameError at Startup (fixed 2026-02-21)
+**Symptom:** `NameError: name 'logger' is not defined` on cold start.
+**Root cause:** The `rembg` import `try/except` block referenced `logger` before `logging.basicConfig()` and `logger = getLogger()` were defined.
+**Fix:** Move logging setup to the very top of `main.py`, before the rembg import block.
 
-## 5. Docker Container
+### Bug 5 — Box / Wall Artifact in 3D Mesh (fixed 2026-02-21)
+**Symptom:** Every generated mesh had a flat rectangular box/wall extruded behind the sculpture.
+**Root causes (two layers):**
+1. Flux images had dark gradient backgrounds → rembg (`u2net`) failed to fully strip them
+2. Preprocessing composited subject onto solid white RGBA canvas → `.convert("RGB")` destroyed alpha → Hunyuan3D saw a solid white 512×512 rectangle and extruded its border as a wall
+
+**Fix (two layers):**
+1. Llama system prompt and Flux prompt suffix now force pure white product-photography style backgrounds
+2. Canvas changed from `(255,255,255,255)` solid → `(0,0,0,0)` transparent. RGBA image passed directly to pipeline. No RGB conversion.
+
+---
 
 ### Dockerfile key decisions
 - **Base:** `python:3.10-slim` (not a heavy CUDA base image) — PyTorch CUDA wheels are installed directly, resulting in a much smaller image.
@@ -116,22 +131,48 @@ Invoke-RestMethod -Method POST -Uri 'http://localhost:8000/generate-3d' -Body $p
 
 ---
 
-## 6. Preprocessing: Background Removal (TODO)
+## 6. Preprocessing: Background Removal ✅ IMPLEMENTED
 
-Hunyuan3D-V2 performs **significantly better** when the input image has a clean, single-subject composition with a white or transparent background. Real user photos contain complex backgrounds that bleed into the 3D geometry.
+Hunyuan3D-V2 performs significantly better when the input image has a clean, isolated subject on a **transparent** background. Dark or gradient backgrounds get interpreted as geometry and extruded into wall artifacts.
 
-**Recommended approach:** Run `rembg` (U²-Net model) inside `main.py` immediately after downloading the image, before passing to the pipeline.
+### Current pipeline in `process_3d()` (`main.py`)
 
 ```python
-from rembg import remove
-from PIL import Image
+from rembg import remove, new_session
+REMBG_SESSION = new_session("isnet-general-use")  # sharper edges than u2net on dark BGs
 
-# After downloading image_bytes:
-image_rgba = remove(image_bytes)   # returns RGBA PNG bytes
-image = Image.open(io.BytesIO(image_rgba)).convert("RGB")
+# 1. Remove background → RGBA
+rgba_image = remove(raw_image, session=REMBG_SESSION)
+
+# 2. Log isolation quality
+transparent_pct = np.sum(alpha < 10) / total_pixels * 100
+logger.info(f"[REMBG-VERIFY] Transparent BG: {transparent_pct:.1f}%")
+# ⚠️ Warning fires if < 20% is transparent — indicates BG removal failure
+
+# 3. Strict alpha threshold: 0 or 255, no fringe
+data[:, :, 3] = np.where(alpha < 200, 0, 255)
+
+# 4. Clear 20px border (kill any remaining edge noise)
+draw.rectangle([0, 0, w, 20], fill=(0,0,0,0))  # etc.
+
+# 5. Crop to bounding box → scale to 75% of 512x512
+rgba_image = rgba_image.crop(bbox).resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+# 6. ⚠️ CRITICAL: Transparent canvas — NOT white!
+# alpha=0 background tells Hunyuan3D "empty space, don't reconstruct"
+canvas = Image.new("RGBA", (512, 512), (0, 0, 0, 0))   # ← must be transparent
+canvas.paste(rgba_image, (paste_x, paste_y), rgba_image)
+image = canvas  # ← Pass RGBA directly. DO NOT convert to RGB.
 ```
 
-**Alternative:** Cloudflare AI Workers has a `background-removal` model — this could be run at the Worker level before the image URL is even sent to the AI engine, keeping the Python container lighter.
+### Why RGBA and NOT RGB
+If you call `.convert("RGB")`, the alpha channel is destroyed and the entire white 512×512 canvas becomes solid. Hunyuan3D then treats the rectangular border as geometry and extrudes it into a box/wall around the sculpture. The RGBA alpha channel is the signal that tells the model which pixels are foreground (α=255) vs background (α=0).
+
+### Why `isnet-general-use` and NOT `u2net`
+- `isnet-general-use` is trained specifically for sharp salient-object detection
+- Handles dark and gradient backgrounds far better than `u2net`
+- Model weights: ~179MB, cached at `~/.u2net/isnet-general-use.onnx` after first download
+- Pre-download before first request: `python -c "from rembg import new_session; new_session('isnet-general-use')"`
 
 ---
 

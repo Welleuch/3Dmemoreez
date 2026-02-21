@@ -53,13 +53,12 @@
 * [x] **Async Communication:** Implement the Webhook in Cloudflare Worker and Python `requests` feedback.
 * [x] **Frontend Polling:** Updated frontend to poll D1 database for "completed" 3D status.
 * [x] **Asset Management:** Mesh uploading from local bridge to Cloudflare R2 via Webhook binary transfer.
-* [x] **Background Removal (Preprocessing):** `rembg` (U2Net) integrated into `main.py`. Super-Purge pipeline active.
-    *   [x] `rembg` U2Net session loaded at engine startup.
-    *   [x] Runs before pipeline call inside `process_3d()`.
-    *   [x] Alpha thresholding (200/255), 20px border clear, 75% subject scale, pure white sweep.
-    *   [ ] **Box artifact still present** — the background removal is working but Flux images have dark gradient backgrounds that rembg can't fully strip. **See SESSION_STATE.md.**
-    *   [ ] **NEXT: Fix upstream in Flux prompt** — force pure white studio background at image generation time. Then rembg will have trivial work to do.
-    *   [ ] Consider switching rembg model to `isnet-general-use` for cleaner edges.
+* [x] **Background Removal (Preprocessing) ✅ COMPLETE (2026-02-21):** `rembg` with `isnet-general-use` integrated. Box artifact eliminated.
+    *   [x] rembg model: `u2net` → **`isnet-general-use`** (sharper edges on dark/gradient BGs)
+    *   [x] Verification logging: transparent%, opaque%, fringe% logged after every rembg run. Warning if < 20% transparent.
+    *   [x] Canvas changed from solid white `(255,255,255,255)` → **transparent `(0,0,0,0)`** — RGBA passed directly to Hunyuan3D
+    *   [x] **Box/wall artifact eliminated** — confirmed with "Corporate Champion" figurine (clean mesh, no extrusion)
+    *   [x] **Flux/Llama prompts fixed** — system prompt forces pure white product photography; FLUX_SUFFIX appended to every generation
 * [ ] **RunPod Serverless Deployment:** Push the verified Docker image to RunPod.
     *   [ ] **Container Registry:** Push image to Docker Hub or RunPod Registry.
     *   [ ] **Network Volume:** Mount `/workspace/models` for weights (avoid re-download every cold start).
@@ -67,26 +66,62 @@
     *   [ ] **Endpoint URL:** Wire RunPod endpoint URL into Cloudflare Worker secret (`RUNPOD_ENDPOINT_URL`).
     *   [ ] **Removes localtunnel dependency** — the root cause of all "Failed to fetch" instability.
 
-## Phase 4: The Geometry Studio (Local Customization)
+## Phase 4a: Manifold Geometry Studio — Engraving
 
-* **Manifold WASM Integration:** Install and initialize the Manifold-3D library in the React frontend.
-* **Parametric Pedestal:** Write the logic to calculate the model's bounding box and generate a matching pedestal mesh.
-* **Engraving Feature:** * Create the `Text3D` mesh from user input.
-* Execute the `Manifold.difference` operation for real-time carving.
+* [ ] **Text3D Mesh Generation:** Create `TextGeometry` mesh from user input string in `ThreeSceneViewer.jsx`
+* [ ] **Manifold Difference:** `Manifold.difference(pedestal_mesh, text_mesh)` → carved engraving
+* [ ] **Live Preview:** Engrave updates in real-time as user types
+* [ ] **Manifold Union:** `Manifold.union(ai_model, engraved_pedestal)` → single watertight merged STL
+* [ ] **Export:** Serialize merged Manifold mesh → STL blob for slicer upload
 
+## Phase 4b: PrusaSlicer Docker Image (Local)
 
-* **Final Export:** Implement the `Manifold.union` to merge the gift and pedestal into one watertight STL.
+* [ ] **Dockerfile:** Ubuntu 22.04 + PrusaSlicer AppImage (headless/CLI build)
+* [ ] **FastAPI wrapper:** Accepts STL file → runs `prusa-slicer-console --slice` → returns G-code + stats JSON
+    * Stats to extract from G-code: `filament used [g]`, `estimated printing time`
+* [ ] **docker-compose.yml:** Port 8001, volume mounts for input/output STLs
+* [ ] **Local test:** Upload the "Corporate Champion" STL and verify G-code + stats output
+* [ ] **Cloudflare Worker route:** `POST /api/slice` → forwards STL to slicer → returns `{gcode_r2_path, material_grams, print_minutes}`
+* [ ] **R2 storage:** Store G-code in R2 under `gcode___SESSION___ORDER.gcode`
 
-## Phase 5: Slicing & Logistics
+## Phase 4c: Checkout UI + Pricing
 
-* **Headless Slicer:** Deploy **PrusaSlicer CLI** on a RunPod worker.
-* **Volume Analysis:** Calculate the mesh volume in the frontend (or via the slicer) to estimate material weight.
-* **Pricing Logic:** Create a helper function to calculate the total cost based on weight, print time, and shipping.
-* **Checkout:** Integrate Stripe or PayPal to handle the final transaction.
+* [ ] **Checkout component:** Display 3D render thumbnail of final model
+* [ ] **Pricing card:** Show material grams, print time, itemized cost breakdown
+    * Formula: `price = (material_grams × €0.03) + €12 service + shipping`
+* [ ] **Address form:** Name, address, country (determines shipping tier)
+* [ ] **D1 Orders table:** Add schema (`id`, `session_id`, `user_email`, `status`, `price_cents`, `material_grams`, `print_duration_minutes`, `gcode_r2_path`, `final_stl_r2_path`, `stripe_payment_intent_id`)
 
-## Phase 6: Fulfillment & Admin Dashboard
+## Phase 4d: Payment + Confirmation Emails
 
-* **G-Code Generation:** Trigger the slicing job upon payment confirmation and save the G-code to R2.
-* **Admin Route:** Build a protected `/admin` page to view paid orders.
-* **Download Center:** Allow the admin (you) to download the G-code and reference image for printing.
-* **Notifications:** Set up automated email confirmations via Resend or Mailgun including the 3D render.
+* [ ] **Stripe integration:** `stripe.paymentIntents.create()` in Cloudflare Worker
+* [ ] **Stripe Elements:** Payment form in Checkout component
+* [ ] **Webhook handler:** `POST /api/webhook/stripe` → verify signature → update D1 `status = 'paid'`
+* [ ] **Resend — Customer email:** Order confirmation with 3D render image + order summary
+* [ ] **Resend — Admin email:** New order notification with G-code download link + reference image
+* [ ] **Success screen:** "Your gift is being printed!" with order ID
+
+## Phase 5: Production Deployment — Mesh Generation (RunPod)
+
+* [ ] **Docker image:** Build and push AI engine image to Docker Hub
+* [ ] **RunPod Network Volume:** Mount `/workspace/models` for `.safetensors` weights
+* [ ] **RunPod Serverless endpoint:** Configure GPU type (RTX 4090 recommended, ~$1.10/hr Flex)
+* [ ] **Cloudflare Worker secret:** Add `RUNPOD_ENDPOINT_URL`
+* [ ] **Replace localtunnel:** Update `AI_ENGINE_URL` in `index.js` from localtunnel → RunPod endpoint
+* [ ] **Test end-to-end:** Verify full pipeline without localtunnel
+
+## Phase 6: Production Deployment — Slicer (Cloudflare Containers)
+
+> Decision rationale: Slicer is CPU-only (~30s), co-located with CF Worker (service binding, no public URL), cheaper than RunPod for CPU work ($0.0012/slice).
+
+* [ ] **Push slicer Docker image** to registry
+* [ ] **Cloudflare Containers config** in `wrangler.toml`
+* [ ] **Service binding** in Worker: call slicer container directly without HTTP round-trip
+* [ ] **Replace localtunnel slicer:** Update Worker to use container binding instead of `localhost:8001`
+
+## Phase 7: Admin Dashboard + Fulfillment
+
+* [ ] **Admin route** `/admin` — token-gated (static secret in CF Worker)
+* [ ] **Order list:** Paid orders with status, email, price, created_at
+* [ ] **Per-order actions:** Download G-code, download final STL, view reference image
+* [ ] **Mark shipped:** Updates D1 `status = 'shipped'` → triggers Resend shipping notification email with tracking number

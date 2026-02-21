@@ -23,8 +23,9 @@ const STEPS = [
     { id: 'checkout', title: 'Checkout', icon: CreditCard },
 ];
 
+// Always use the deployed worker — wrangler dev --remote can be slow to start
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:8787'
+    ? 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev'
     : 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev';
 
 export default function App() {

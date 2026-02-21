@@ -1,134 +1,144 @@
-# 3Dmemoreez — Session State Summary
+# 3Dmemoreez — Session State
 # For handoff to a new chat session
 
-> Last updated: 2026-02-20 23:19
+> Last updated: 2026-02-21
+> ⚠️ For recurring bugs and their fixes, see: **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)**
 
 ---
 
-## ✅ What is Working RIGHT NOW
+## 🏆 Current Milestone: Full Pipeline Working — Clean Meshes ✅
 
-1. **Full pipeline runs end-to-end**: Hobbies → Llama → Flux → 4 images → User selects → Hunyuan3D → STL → R2 → 3D Viewer
-2. **Docker AI Engine**: Runs locally on GPU (RTX 5060 Ti, `sm_89`), generates ~34 MB STL in ~55 seconds
-3. **3D Model renders in browser** via React Three Fiber (STLLoader)
-4. **D1 database** correctly tracks session/asset states
-5. **R2 storage** stores both images and STL files
-6. **Cloudflare Worker** handles all API routing, AI orchestration, webhook receiving
+The full end-to-end pipeline works without artifacts. Here's what was achieved this session:
+
+**Screenshot evidence:** "Corporate Champion" figurine — clean white sculpture on a pedestal, no box wall artifact, FDM RIGIDITY OK + TOPOLOGY PURIFIED shown in viewer.
 
 ---
 
-## ❌ Known Issues / Bugs
+## ✅ What Works Right Now (Complete Feature Set)
 
-### Issue 1 — Localtunnel Instability (CRITICAL)
-**Problem:** `localtunnel` drops intermittently. When it's down, the Cloudflare production Worker silently fails to reach the AI engine (the `ctx.waitUntil` swallows the error). The asset stays in `processing` forever in D1.
+1. **Full pipeline end-to-end:** Hobbies → Llama → Flux × 4 → Concept gallery → User selects → Hunyuan3D → STL → R2 → 3D viewer
+2. **Image generation quality:** Images look like gray matte clay sculptures on a pure white product-photography background (correct for 3D printing)
+3. **Background removal:** `rembg` with `isnet-general-use` isolates the subject cleanly. RGBA image passed directly to Hunyuan3D — no box wall artifact
+4. **Mesh generation:** Hunyuan3D-V2 on RTX 5060 GPU, ~55 seconds, ~34MB STL, ~674k triangles
+5. **3D Viewer:** React Three Fiber with STLLoader, auto-rotation, orbit controls, pedestal, cortex engraving input
+6. **Backend:** Cloudflare Worker handles all API routing, D1 sessions, R2 assets, webhook receiving
+7. **Polling:** Frontend polls every 3 seconds, detects `status = 'completed'`, loads STL from R2
 
-**Current workaround:** Manually re-trigger via:
-```powershell
-Invoke-RestMethod -Uri "https://3dmemoreez-ai.loca.lt/generate-3d" -Method POST `
-  -Headers @{"Content-Type"="application/json";"bypass-tunnel-reminder"="true"} `
-  -Body '{"image_url":"...","webhook_url":"...","session_id":"...","asset_id":"..."}'
+---
+
+## ⚠️ Known Limitations / Open Issues
+
+### Issue 1 — Localtunnel Instability
+**Problem:** `localtunnel` can drop intermittently. The `ctx.waitUntil()` in the Worker swallows the error. Asset stays in `processing` forever.
+
+**Workaround:** Re-start tunnel + manually re-trigger generation. See `TROUBLESHOOTING.md` Error 4.
+
+**Real fix:** Deploy AI engine to **RunPod Serverless** (Phase 3 next step).
+
+### Issue 2 — AI Engine Not Deployed (Localtunnel Dependency)
+The AI engine runs locally on a GPU machine exposed via localtunnel. This is development-only infrastructure. Production requires RunPod or similar GPU cloud.
+
+### Issue 3 — Box Artifact (Minimal, Under Observation)
+The previous full box/wall artifact is ✅ **fixed**. There may be minor framing in some edge cases (very dark images). The verification logging in `main.py` will flag any degraded isolations at runtime.
+
+---
+
+## 📁 Key Files
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `backend/src/index.js` | Cloudflare Worker — ALL API logic | ✅ Deployed to production |
+| `backend/ai_engine/main.py` | FastAPI — rembg → Hunyuan3D → webhook | ✅ Running locally |
+| `backend/ai_engine/hy3dgen/` | Vendored Hunyuan3D library | ✅ ComfyUI-free |
+| `src/App.jsx` | Step router + API_BASE_URL | ✅ Points to production worker |
+| `src/components/ThreeSceneViewer.jsx` | 3D Studio + polling | ✅ Working |
+| `src/components/ConceptCardGrid.jsx` | 4-image concept gallery | ✅ Working |
+| `src/lib/manifold.js` | Manifold WASM pedestal + engraving | 🟡 Basic pedestal works, engraving partial |
+
+---
+
+## 🔧 Current State of Key Configurations
+
+### `backend/src/index.js` — Flux Prompt Strategy
+```js
+// Llama system prompt forces: pure white background, gray matte clay sculpture,
+// product photography style, no shadows, no gradient
+const systemPrompt = `...PURE WHITE background (#FFFFFF)... gray matte clay sculpture...`
+
+// Hard-coded suffix appended to EVERY Flux prompt
+const FLUX_SUFFIX = ", gray matte clay sculpture, pure white studio background, product photography, isolated object, no shadows, no gradient, flat even lighting, professional product shot";
 ```
 
-**Real fix needed:** Add retry logic in the Worker, or switch to `ngrok` with a persistent URL, or deploy to RunPod.
-
----
-
-### Issue 2 — "Box" Artifact in 3D Model (MAIN OPEN PROBLEM)
-**Problem:** The 3D mesh includes a thin rectangular wall/plane behind the sculpture. This is caused by the input image having a gradient or non-pure background that Hunyuan3D interprets as 3D geometry.
-
-**What was tried:**
-- `rembg` U2Net background removal ✅ installed and active in `main.py`
-- "Super-Purge" preprocessing: Alpha thresholding at 200/255, 20px border clear, 75% subject scale, pure white sweep ✅ active
-- **Result:** The box is smaller but still present. The `rembg` is removing backgrounds but subtle edge gradients remain.
-
-**Root hypothesis for next session:**
-
-The real problem may be **upstream at the image generation stage**, not the background removal stage. The Flux-generated images currently have:
-- Dark gradient backgrounds (not pure white)
-- Photorealistic rendering style (not suitable for 3D printing from an AI perspective)
-
-**Proposed fix for next session:**
-1. **Fix the Flux prompt** to force a white studio/product-photography background: add keywords like `"product photo, pure white background, studio lighting, no shadows, isolated object"`
-2. **Fix the Llama system prompt** to ensure generated image prompts describe objects on a white background, not gradient dark renders
-3. Then `rembg` will have much less work to do (near-pure white background → trivial removal)
-
----
-
-## 📁 Key Files to Know
-
-| File | Purpose |
-|------|---------|
-| `backend/src/index.js` | The entire Cloudflare Worker (API + AI orchestration + webhooks) |
-| `backend/ai_engine/main.py` | FastAPI server: image download → rembg → Hunyuan3D → STL → webhook |
-| `backend/ai_engine/Dockerfile` | PyTorch nightly cu128 (Blackwell support) |
-| `backend/ai_engine/docker-compose.yml` | GPU passthrough, model volume mount |
-| `src/components/ThreeSceneViewer.jsx` | 3D Studio: polls D1, loads STL, renders with R3F |
-| `src/App.jsx` | Step router + API_BASE_URL definition |
-| `docs/ARCHITECTURE.md` | Full system map + endpoints |
-| `docs/ai_engine.md` | AI engine deep-dive (3 bugs fixed + params) |
-
----
-
-## 🔧 Current State of `main.py` Preprocessing
-
+### `backend/ai_engine/main.py` — Preprocessing State
 ```python
-# rembg session loaded at startup
-REMBG_SESSION = new_session("u2net")
+# rembg model (sharp edge detection on dark/gradient BGs)
+REMBG_SESSION = new_session("isnet-general-use")
 
-# In process_3d():
-if REMBG_AVAILABLE:
-    # 1. Remove background
-    image_rgba = remove(raw_image, session=REMBG_SESSION)
-    
-    # 2. Alpha threshold: kill anything < 200/255 opacity (Super-Purge)
-    alpha_np[alpha_np < 200] = 0
-    alpha_np[alpha_np >= 200] = 255
-    
-    # 3. Border clear: 20px all sides
-    alpha_np[:20, :] = 0
-    alpha_np[-20:, :] = 0
-    alpha_np[:, :20] = 0
-    alpha_np[:, -20:] = 0
-    
-    # 4. Crop to bounding box, resize to 75% of 512x512 (128px padding)
-    # 5. Final sweep: any pixel > 240 on all channels → force to 255,255,255
-    # 6. Convert to RGB on pure white background
+# Critical: transparent canvas, RGBA output — NOT RGB
+canvas = Image.new("RGBA", (512, 512), (0, 0, 0, 0))  # transparent, NOT white
+canvas.paste(rgba_image, (paste_x, paste_y), rgba_image)
+image = canvas  # RGBA passed directly to Hunyuan3D — DO NOT convert to RGB
+```
+
+### `src/App.jsx` + `src/components/ThreeSceneViewer.jsx`
+```js
+// Always use production worker — DO NOT change to localhost:8787
+const API_BASE_URL = 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev';
 ```
 
 ---
 
-## 🚀 Recommended Next Chat Focus
+## 🚀 Next Steps (Priority Order)
 
-**Phase A — Fix Image Generation Quality (do this FIRST)**
-- Update the Llama system prompt to force: `"pure white studio background, product photography"`
-- Add to Flux prompt suffix: `"professional product photo, isolated on white background, studio lighting, no shadows, high contrast edges"`  
-- Goal: Concept images should look like **gray 3D-printed parts on a white photo-studio backdrop** — exactly what you'd see on a product sheet
+### 🔴 Priority 1 — RunPod Deployment (eliminates localtunnel)
+- [ ] Push Docker image to Docker Hub / RunPod Registry
+- [ ] Configure RunPod Network Volume for model weights (`/workspace/models`)
+- [ ] Deploy as RunPod Serverless endpoint
+- [ ] Add `RUNPOD_ENDPOINT_URL` as Cloudflare Worker secret
+- [ ] Update `AI_ENGINE_URL` in `index.js` from localtunnel → RunPod URL
+- [ ] **Result:** No more localtunnel. Production-grade pipeline.
 
-**Phase B — Background Removal**
-- Once images naturally have white backgrounds, `rembg` will work cleanly
-- If still needed: try `rembg` with `isnet-general-use` model (better edge quality than `u2net`)
-- May not even need rembg if Flux generates true white backgrounds
+### 🟡 Priority 2 — Phase 4: Geometry Studio (Manifold)
+- [ ] Engraving feature: `Text3D` mesh from user input → `Manifold.difference` carve
+- [ ] Final export: `Manifold.union` → merged pedestal + gift → single watertight STL
 
-**Phase C — RunPod Deployment**
-- Remove localtunnel (the source of all instability)
-- Deploy Docker image to RunPod Serverless
-- Wire `RUNPOD_ENDPOINT_URL` into Cloudflare Worker secret
+### 🟡 Priority 3 — Phase 5: Slicing & Checkout
+- [ ] PrusaSlicer CLI on RunPod worker → G-code generation
+- [ ] Volume analysis → weight estimate → pricing
+- [ ] Stripe/PayPal checkout integration
+
+### 🟢 Priority 4 — UI Polish
+- [ ] Noise/film grain background overlay
+- [ ] Cursor-following glow effects on glass containers
+- [ ] Stagger-animate header characters for editorial reveal
 
 ---
 
-## 🏃 Local Dev Startup
+## 🏃 Local Dev Startup (Definitive — 3 Terminals Only)
 
 ```powershell
-# Terminal 1 — AI Engine
-cd backend/ai_engine && docker compose up
+# Terminal 1 — AI Engine (from backend/ai_engine/)
+.\venv\Scripts\uvicorn.exe main:app --host 0.0.0.0 --port 8000 --reload
 
-# Terminal 2 — Tunnel (CHECK it's alive before clicking!)
+# Terminal 2 — Localtunnel (from project root)
 npx localtunnel --port 8000 --subdomain 3dmemoreez-ai
 
-# Terminal 3 — Worker
-cd backend && npx wrangler dev --remote --port 8787
-
-# Terminal 4 — Frontend
+# Terminal 3 — Frontend (from project root)
 npm run dev
 ```
 
-**Verify tunnel:** `Invoke-RestMethod https://3dmemoreez-ai.loca.lt/health`
+**Open:** `http://localhost:5173`
+
+**DO NOT start** `npx wrangler dev --remote` — it's slow, unnecessary, and causes "Failed to fetch" errors. See `TROUBLESHOOTING.md`.
+
+**To deploy Worker changes after editing `backend/src/index.js`:**
+```powershell
+cd backend
+npx wrangler deploy
+```
+
+**Verify alive:**
+```powershell
+Invoke-RestMethod https://3d-memoreez-orchestrator.walid-elleuch.workers.dev/api/health
+Invoke-RestMethod https://3dmemoreez-ai.loca.lt/health
+```

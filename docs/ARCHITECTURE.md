@@ -1,6 +1,6 @@
 # 3Dmemoreez — System Architecture Map
 
-> Last updated: 2026-02-20
+> Last updated: 2026-02-21
 
 ---
 
@@ -29,10 +29,10 @@
 [Localtunnel → https://3dmemoreez-ai.loca.lt]
    │
    ▼
-[Docker AI Engine — localhost:8000]
+[Local AI Engine — localhost:8000 (venv/uvicorn)]
    │  • Downloads image from R2 via /api/assets/{key}
-   │  • Runs rembg background removal (Super-Purge pipeline)
-   │  • Runs Hunyuan3D-V2 3-stage inference
+   │  • rembg (isnet-general-use) background removal → RGBA transparent canvas
+   │  • Runs Hunyuan3D-V2 3-stage inference (GPU — RTX 5060)
    │  • POSTs STL binary to webhook
    │
    │  POST /api/webhook/runpod (STL binary + session_id + asset_id)
@@ -127,8 +127,9 @@
     ├── specification.md          ← Vision, tech stack, UX flow
     ├── TODO.md                   ← Phase-by-phase task tracking
     ├── ARCHITECTURE.md           ← This file
-    ├── ai_engine.md              ← AI engine deep-dive (bugs, params, perf)
-    └── SESSION_STATE.md          ← Current session state (for new chat handoff)
+    ├── ai_engine.md              ← AI engine deep-dive (bugs, params, perf, preprocessing)
+    ├── SESSION_STATE.md          ← Current session state (for new chat handoff)
+    └── TROUBLESHOOTING.md        ← Recurring errors + exact fixes (READ FIRST in new chat)
 ```
 
 ---
@@ -177,27 +178,35 @@ CREATE TABLE Assets (
 
 ---
 
-## 6. Local Dev Startup Checklist
+## 6. Local Dev Startup Checklist (Definitive)
 
-Run these 4 things in separate terminals:
+**You only need 3 terminals.** The Worker runs on production — no wrangler dev needed.
 
 ```powershell
-# 1. Docker AI Engine (GPU)
-cd backend/ai_engine
-docker compose up
+# Terminal 1 — AI Engine (from backend/ai_engine/)
+.\venv\Scripts\uvicorn.exe main:app --host 0.0.0.0 --port 8000 --reload
 
-# 2. Localtunnel (expose port 8000)
+# Terminal 2 — Localtunnel (from project root)
 npx localtunnel --port 8000 --subdomain 3dmemoreez-ai
 
-# 3. Cloudflare Worker (local dev with remote bindings)
-cd backend
-npx wrangler dev --remote --port 8787
-
-# 4. Frontend (Vite)
+# Terminal 3 — Frontend (from project root)
 npm run dev
 ```
 
-**Verify tunnel is alive before clicking a concept image:**
+**Frontend:** `http://localhost:5173`  
+**Worker:** `https://3d-memoreez-orchestrator.walid-elleuch.workers.dev` (always live, called directly)
+
+**To deploy Worker changes:** `cd backend && npx wrangler deploy`
+
+**Verify everything is alive before clicking:**
 ```powershell
+# Worker health
+Invoke-RestMethod https://3d-memoreez-orchestrator.walid-elleuch.workers.dev/api/health
+# Expected: {"status":"ok"}
+
+# AI Engine via tunnel
 Invoke-RestMethod https://3dmemoreez-ai.loca.lt/health
+# Expected: {"status":"ok","gpu":true,"import_success":true}
 ```
+
+> ⚠️ See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for common errors and fixes.

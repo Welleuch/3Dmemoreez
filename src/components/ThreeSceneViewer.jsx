@@ -13,11 +13,12 @@ import * as THREE from 'three';
 import { ChevronLeft, ArrowRight, Type, Box, Zap, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+// Always use the deployed worker — wrangler dev --remote can be slow to start
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:8787'
+    ? 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev'
     : 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev';
 
-import { getManifold, createPedestal } from '../lib/manifold';
+import { getManifold, createPedestal, estimatePrintMaterial } from '../lib/manifold';
 
 function Pedestal({ modelBounds, text }) {
     const [geometry, setGeometry] = useState(null);
@@ -145,6 +146,11 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
     const [status, setStatus] = useState('processing'); // processing, completed, failed
     const [stlUrl, setStlUrl] = useState(null);
     const [modelBounds, setModelBounds] = useState(null);
+    const [printEstimate, setPrintEstimate] = useState(null); // volume + price estimate
+
+    // Refs to keep current Manifold objects for volume calculation at finalize
+    const manifoldModelRef = useRef(null);   // the AI model as Manifold object
+    const manifoldPedestalRef = useRef(null); // the pedestal as Manifold object
 
     // Polling for 3D Model Status
     useEffect(() => {
@@ -175,12 +181,42 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
         return () => clearInterval(interval);
     }, [sessionId, status]);
 
-    const handleFinalize = () => {
+    const handleFinalize = async () => {
         setIsProcessing(true);
-        setTimeout(() => {
+        try {
+            const Manifold = await getManifold();
+
+            // Re-create pedestal from current bounds to get a Manifold object
+            // (the Pedestal R3F component holds its own copy; here we need
+            //  the Manifold object directly for volume math)
+            let estimate = null;
+            if (modelBounds) {
+                const pedestalHeight = 0.4;
+                const padding = 0.5;
+                const pedestalManifold = createPedestal(Manifold, modelBounds, padding, pedestalHeight);
+
+                // For the volume estimate we only need the pedestal volume
+                // (the AI model STL is not yet available as a Manifold object —
+                //  that's Phase 4a work; for now we estimate on pedestal alone
+                //  and note this will be updated once engraving/union is implemented)
+                estimate = estimatePrintMaterial(pedestalManifold, {
+                    infillRatio: 0.15,
+                    perimeterCount: 3,
+                    nozzleDiameter: 0.4,
+                });
+
+                console.log('[VOLUME] Print estimate:', estimate);
+                console.log('[VOLUME] Debug breakdown (compare with PrusaSlicer):', estimate._debug);
+                setPrintEstimate(estimate);
+            }
+
             setIsProcessing(false);
-            onNext();
-        }, 2000);
+            onNext({ printEstimate: estimate, engravingText, stlUrl });
+        } catch (err) {
+            console.error('[FINALIZE] Volume calculation failed:', err);
+            setIsProcessing(false);
+            onNext({ printEstimate: null, engravingText, stlUrl });
+        }
     };
 
     return (

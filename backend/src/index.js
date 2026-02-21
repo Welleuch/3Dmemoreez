@@ -49,23 +49,37 @@ export default {
                 ).bind(sessionId, JSON.stringify(hobbies), "selection").run();
 
                 // 3.1 Llama Prompt Orchestration
-                const systemPrompt = `You are an expert 3D Design Engineer specializing in Additive Manufacturing (FDM).
+                const systemPrompt = `You are an expert 3D Design Engineer specializing in Additive Manufacturing (FDM) and product photography.
 Task: Convert user hobbies/facts into 4 distinct image generation prompts for Flux Schnell.
-Constraints for Printability:
-1. Base: Every object must have a clearly defined, flat, and wide structural base.
-2. Overhangs: Avoid any floating parts or angles steeper than 45 degrees. Use organic, tapered transitions.
-3. Thickness: Ensure no part of the model is thinner than 2.0mm. No "whisker" or "hair" textures.
-4. Style: Keywords: "Solid 3D sculpture, gray matte finish, flat base, manifold geometry, studio lighting, high contrast, non-porous surface."
 
-Safety & Style Constraints:
+=== BACKGROUND & LIGHTING — NON-NEGOTIABLE ===
+EVERY prompt MUST produce an image that looks like a professional product photo:
+- PURE WHITE background. Not off-white, not gray, not gradient — pure white (#FFFFFF).
+- NO shadows, NO drop shadows, NO reflections on the background.
+- NO dark gradient behind the object.
+- NO environmental context (no floor, no shelf, no studio visible).
+- Isolated object floating or standing on a pure white void.
+- Lighting: flat, even, diffuse studio softbox lighting. No dramatic rim lighting.
+
+=== OBJECT STYLE ===
+- The subject is ALWAYS a gray matte clay sculpture / gray PLA 3D-printed figurine.
+- NO photorealistic textures. NO skin. NO hair. NO fur. NO glass. NO metals.
+- Matte gray filament color — think: gray plastic toy or unpainted clay.
+- Solid, monolithic form. No thin wires or floating disconnected parts.
+
+=== 3D PRINTABILITY CONSTRAINTS ===
+1. Base: Every object must have a clearly defined, flat, and wide structural base.
+2. Overhangs: Avoid angles steeper than 45 degrees. Use organic, tapered transitions.
+3. Thickness: No part thinner than 2.0mm. No whisker or hair textures.
+
+=== SAFETY ===
 - NO HUMAN SKIN or Realistic Human Features.
 - Focus on STYLIZED FIGURINES, MONOLITHIC STATUES, or CLAY SCULPTURES.
-- Avoid any suggestive or visceral descriptions.
-- Use strictly object-centric language (e.g., "A stone-textured figurine of a swimmer" instead of "A realistic swimmer").
+- Use object-centric language (e.g., "A gray clay figurine of a swimmer" NOT "A realistic swimmer").
 
 Generate 4 concepts:
 - 2 Literal: Sturdy, fused mashups of the objects.
-- 2 Artistic: Solid, sculptural, low-poly or "clay-sculpted" aesthetic.
+- 2 Artistic: Solid, sculptural, low-poly or clay-sculpted aesthetic.
 
 CRITICAL: Return ONLY a raw JSON object. No conversational text. No markdown formatting.
 Structure:
@@ -103,10 +117,15 @@ Structure:
                 }
 
                 // 3.2 Flux Image Generation (Parallel)
+                // Hard-coded suffix appended to every Flux prompt to guarantee white-background product shot
+                const FLUX_SUFFIX = ", gray matte clay sculpture, pure white studio background, product photography, isolated object, no shadows, no gradient, no environment, flat even lighting, professional product shot";
+
                 const generationPromises = result.concepts.map(async (concept) => {
                     try {
+                        const finalPrompt = concept.prompt + FLUX_SUFFIX;
+                        console.log(`[FLUX] Prompt for "${concept.title}": ${finalPrompt.substring(0, 120)}...`);
                         const fluxResponse = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
-                            prompt: concept.prompt,
+                            prompt: finalPrompt,
                         });
 
                         if (!fluxResponse) {

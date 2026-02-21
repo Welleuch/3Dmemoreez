@@ -12,17 +12,20 @@ from pydantic import BaseModel
 from typing import Optional
 import logging
 
+# Setup Logging (must be before any logger.* calls)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("AI-Engine")
+
 try:
     from rembg import remove, new_session
-    REMBG_SESSION = new_session("u2net")
+    # isnet-general-use has sharper edge detection and handles dark/gradient backgrounds
+    # much better than u2net — critical for Flux-generated images with dark gradient BGs
+    REMBG_SESSION = new_session("isnet-general-use")
     REMBG_AVAILABLE = True
+    logger.info("rembg loaded with model: isnet-general-use")
 except ImportError:
     REMBG_AVAILABLE = False
     logger.warning("rembg not installed, background removal will be skipped.")
-
-# Setup Logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("AI-Engine")
 
 # 2. MODEL CONFIGURATION
 # Default to Windows path if not in env (Docker sets this env var)
@@ -126,18 +129,33 @@ def process_3d(image_url: str, webhook_url: str, session_id: str, asset_id: str)
         raw_image = Image.open(io.BytesIO(image_resp.content))
         
         if REMBG_AVAILABLE:
-            logger.info("Applying Super-Purge pre-processing (Strict Thresholding + 15px Clear)...")
+            logger.info("[REMBG] Running isnet-general-use background removal...")
             rgba_image = remove(raw_image, session=REMBG_SESSION)
+            
+            # ✅ VERIFICATION STEP: Check how well rembg removed the background
+            verify_data = np.array(rgba_image)
+            total_pixels = verify_data.shape[0] * verify_data.shape[1]
+            transparent_pixels = np.sum(verify_data[:, :, 3] < 10)   # near-fully transparent
+            opaque_pixels = np.sum(verify_data[:, :, 3] > 245)        # near-fully opaque (object)
+            semi_pixels = total_pixels - transparent_pixels - opaque_pixels  # fringe/semi
+            transparent_pct = (transparent_pixels / total_pixels) * 100
+            opaque_pct = (opaque_pixels / total_pixels) * 100
+            semi_pct = (semi_pixels / total_pixels) * 100
+            logger.info(f"[REMBG-VERIFY] Transparent BG: {transparent_pct:.1f}% | Solid Subject: {opaque_pct:.1f}% | Fringe: {semi_pct:.1f}%")
+            
+            if transparent_pct < 20:
+                logger.warning(f"[REMBG-VERIFY] ⚠️ WARNING: Only {transparent_pct:.1f}% of pixels are transparent — background removal may have failed! Dark gradient BG detected?")
+            elif transparent_pct > 50:
+                logger.info(f"[REMBG-VERIFY] ✅ Good isolation: {transparent_pct:.1f}% transparent background.")
             
             # 1. 🔍 Strict Alpha Thresholding
             # Kill ALL fringe pixels early. If it's not mostly solid, it's gone.
             data = np.array(rgba_image)
             alpha = data[:, :, 3]
-            data[:, :, 3] = np.where(alpha < 200, 0, 255) # Much stricter (was 128)
+            data[:, :, 3] = np.where(alpha < 200, 0, 255)  # Strict binary: 0 or 255
             rgba_image = Image.fromarray(data)
             
-            # 2. 🧹 Super-Clear Borders
-            # Zero out a massive 20px border to be absolutely sure no edge noise survives
+            # 2. 🧹 Super-Clear Borders (20px border wipe)
             w, h = rgba_image.size
             import PIL.ImageDraw as ImageDraw
             draw = ImageDraw.Draw(rgba_image)
@@ -152,30 +170,35 @@ def process_3d(image_url: str, webhook_url: str, session_id: str, asset_id: str)
             if bbox:
                 rgba_image = rgba_image.crop(bbox)
             
-            # 4. 📏 Safe Scaling (75% to maximize padding)
+            # 4. 📏 Safe Scaling (75% canvas fill to maximize padding)
             max_size = 512
-            side_len = int(max_size * 0.75) # 25% total padding
+            side_len = int(max_size * 0.75)  # 25% total padding
             w, h = rgba_image.size
             scale = side_len / max(w, h)
             new_w, new_h = int(w * scale), int(h * scale)
             rgba_image = rgba_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
             
-            # 5. ⚪ Pure White Canvas
-            canvas = Image.new("RGBA", (max_size, max_size), (255, 255, 255, 255))
+            # 5. 🖼️ Centre subject on a TRANSPARENT canvas (NOT white!)
+            # CRITICAL: alpha=0 background tells Hunyuan3D "this is empty space".
+            # A solid white (alpha=255) background gets interpreted as geometry
+            # → extruded into the box/wall artifact we want to eliminate.
+            canvas = Image.new("RGBA", (max_size, max_size), (0, 0, 0, 0))  # fully transparent
             paste_x = (max_size - new_w) // 2
             paste_y = (max_size - new_h) // 2
             canvas.paste(rgba_image, (paste_x, paste_y), rgba_image)
             
-            # 6. Final RGB + Pure White Sweep
-            image = canvas.convert("RGB")
-            # Force any near-white pixels to pure white (killing remaining compression noise)
-            data = np.array(image)
-            # If all channels sum to > 750 (near white), make it pure white (765)
-            mask = np.sum(data, axis=2) > 750
-            data[mask] = [255, 255, 255]
-            image = Image.fromarray(data)
+            # 6. Keep as RGBA — pass the transparent image directly to Hunyuan3D.
+            # The alpha channel lets the pipeline know exactly which pixels are
+            # subject (α=255) vs background (α=0). No RGB conversion = no box artifact.
+            image = canvas  # RGBA, transparent background
             
-            logger.info("Super-Purge complete. Subject isolated on pure white void.")
+            # ✅ FINAL VERIFICATION: log the resulting transparent pixel ratio
+            final_data = np.array(image)
+            final_transparent = np.sum(final_data[:, :, 3] < 10)
+            final_opaque = np.sum(final_data[:, :, 3] > 245)
+            final_total = max_size * max_size
+            logger.info(f"[REMBG-VERIFY] ✅ Final RGBA canvas — Transparent: {(final_transparent/final_total*100):.1f}% | Subject: {(final_opaque/final_total*100):.1f}%")
+            logger.info("[REMBG] Done — RGBA image with transparent BG ready for Hunyuan3D.")
         else:
             image = raw_image.convert("RGB")
         
