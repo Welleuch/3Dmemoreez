@@ -66,13 +66,13 @@
     *   [ ] **Endpoint URL:** Wire RunPod endpoint URL into Cloudflare Worker secret (`RUNPOD_ENDPOINT_URL`).
     *   [ ] **Removes localtunnel dependency** — the root cause of all "Failed to fetch" instability.
 
-## Phase 4a: Manifold Geometry Studio — Engraving
+## Phase 4a: Manifold Geometry Studio — Engraving (✅ COMPLETE)
 
-* [ ] **Text3D Mesh Generation:** Create `TextGeometry` mesh from user input string in `ThreeSceneViewer.jsx`
-* [ ] **Manifold Difference:** `Manifold.difference(pedestal_mesh, text_mesh)` → carved engraving
-* [ ] **Live Preview:** Engrave updates in real-time as user types
-* [ ] **Manifold Union:** `Manifold.union(ai_model, engraved_pedestal)` → single watertight merged STL
-* [ ] **Export:** Serialize merged Manifold mesh → STL blob for slicer upload
+* [x] **Text3D Mesh Generation:** Create `TextGeometry` mesh from user input string in `ThreeSceneViewer.jsx`
+* [x] **Cylindrical Vertex Wrapping:** Use polar transformation to "bend" text around the pedestal arc.
+* [x] **CSG Subtraction:** `evaluator.evaluate(pedestal, text, SUBTRACTION)` → constant-depth carved engraving (0.4mm).
+* [x] **Live Preview:** Engrave updates in real-time as user types with hot-swapping to prevent "ghost" models.
+* [x] **Unified Union:** `evaluator.evaluate(pedestal, figurine, ADDITION)` → single watertight merged geometry.
 
 ## Phase 4b: PrusaSlicer Docker Image (Local)
 

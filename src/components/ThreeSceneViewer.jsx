@@ -3,9 +3,7 @@ import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import {
     OrbitControls,
     PerspectiveCamera,
-    Text,
     Stage,
-    Float,
     Html
 } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
@@ -13,76 +11,102 @@ import * as THREE from 'three';
 import { ChevronLeft, ArrowRight, Type, Box, Zap, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-// Always use the deployed worker — wrangler dev --remote can be slow to start
-const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev'
-    : 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev';
+const API_BASE_URL = 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev';
 
-import { getManifold, createPedestal, estimatePrintMaterial } from '../lib/manifold';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry';
+import { extend } from '@react-three/fiber';
+import { createEngravedPedestalCSG } from '../lib/csgEngine';
 
-function Pedestal({ modelBounds, text }) {
+extend({ RoundedBoxGeometry });
+
+function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged }) {
     const [geometry, setGeometry] = useState(null);
-    const manifoldRef = useRef(null);
+    const [isGenerating, setIsGenerating] = useState(false);
 
-    const pedestalHeight = 0.4;
-    const padding = 0.5;
+    // Compute local bounds for consistent positioning between fallback and CSG
+    const localBounds = useMemo(() => {
+        if (!modelMesh) return modelBounds;
+        modelMesh.geometry.computeBoundingBox();
+        return modelMesh.geometry.boundingBox;
+    }, [modelMesh, modelBounds]);
 
     useEffect(() => {
+        if (!modelMesh || !localBounds) return;
+
+        let active = true;
         async function init() {
-            const Manifold = await getManifold();
-            manifoldRef.current = Manifold;
+            setIsGenerating(true);
+            try {
+                const size = new THREE.Vector3();
+                localBounds.getSize(size);
 
-            // Create a slightly larger, more elegant pedestal
-            let pedestal = createPedestal(Manifold, modelBounds, padding, pedestalHeight);
+                const h = Math.max(0.35, size.y * 0.08);
+                const p = Math.max(0.35, size.x * 0.12);
 
-            const mesh = pedestal.getMesh();
-            const threeGeom = new THREE.BufferGeometry();
-            threeGeom.setAttribute('position', new THREE.BufferAttribute(mesh.vertProperties, 3));
-            threeGeom.setIndex(new THREE.BufferAttribute(mesh.triVerts, 1));
-            threeGeom.computeVertexNormals();
+                const csgGeom = await createEngravedPedestalCSG(
+                    modelMesh,
+                    localBounds,
+                    line1,
+                    line2,
+                    p,
+                    h
+                );
 
-            setGeometry(threeGeom);
+                if (active) {
+                    setGeometry(csgGeom);
+                    if (onMerged) onMerged();
+                }
+            } catch (err) {
+                console.error("[STUDIO] CSG Failure:", err);
+            } finally {
+                if (active) setIsGenerating(false);
+            }
         }
-        if (modelBounds) init();
-    }, [modelBounds, text, padding, pedestalHeight]);
 
-    if (!geometry) return null;
+        const timer = setTimeout(init, 400);
+        return () => {
+            active = false;
+            clearTimeout(timer);
+        };
+    }, [modelMesh, localBounds, line1, line2]);
 
-    // Calculate center of front face for text
-    const { min, max } = modelBounds;
-    const centerX = (min.x + max.x) / 2;
-    const centerZ = (min.z + max.z) / 2;
-    const frontZ = (max.z - min.z) / 2 + padding + centerZ;
-    const textY = min.y - pedestalHeight / 2;
+    // Fallback display logic
+    const size = new THREE.Vector3();
+    if (localBounds) localBounds.getSize(size);
+    const boxH = Math.max(0.35, size.y * 0.08);
+    const radius = Math.max(size.x, size.z) / 2 + 0.35; // Synced with CSG padding
+    const centerX = localBounds ? (localBounds.min.x + localBounds.max.x) / 2 : 0;
+    const centerZ = localBounds ? (localBounds.min.z + localBounds.max.z) / 2 : 0;
+    const centerY = localBounds ? localBounds.min.y + 0.1 - boxH / 2 : 0;
 
     return (
         <group>
-            <mesh geometry={geometry} receiveShadow castShadow>
-                <meshStandardMaterial
-                    color="#111111"
-                    roughness={0.1}
-                    metalness={0.9}
-                />
-            </mesh>
-
-            {text && (
-                <Text
-                    position={[centerX, textY, frontZ + 0.01]} // Tiny offset to prevent z-fighting
-                    fontSize={0.12}
-                    color="#8b5cf6"
-                    font="https://fonts.gstatic.com/s/outfit/v11/QGYxz_WzptA6326dX55uRf8.woff"
-                    anchorX="center"
-                    anchorY="middle"
-                    rotation={[0, 0, 0]}
-                    maxWidth={(max.x - min.x) + padding}
-                >
-                    {text.toUpperCase()}
+            {geometry ? (
+                <mesh geometry={geometry} receiveShadow castShadow>
                     <meshStandardMaterial
-                        color="#8b5cf6"
-                        emissive="#8b5cf6"
-                        emissiveIntensity={0.8}
+                        color="#e5e7eb"
+                        roughness={0.3}
+                        metalness={0.4}
                     />
-                </Text>
+                </mesh>
+            ) : (
+                <mesh position={[centerX, centerY, centerZ]} receiveShadow castShadow>
+                    <cylinderGeometry args={[radius, radius, boxH, 64]} />
+                    <meshStandardMaterial
+                        color="#e5e7eb"
+                        roughness={0.3}
+                        metalness={0.4}
+                    />
+                </mesh>
+            )}
+
+            {isGenerating && (
+                <Html position={[centerX, centerY + boxH / 2 + 0.2, centerZ]}>
+                    <div className="flex items-center gap-2 bg-black/80 px-3 py-1 rounded-full border border-white/10 whitespace-nowrap">
+                        <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                        <span className="text-[10px] font-bold text-white/80 tracking-widest italic">Engraving...</span>
+                    </div>
+                </Html>
             )}
         </group>
     );
@@ -93,18 +117,22 @@ function AIModel({ url, onLoaded }) {
     const meshRef = useRef();
 
     useEffect(() => {
-        if (geom && onLoaded) {
+        if (geom) {
             geom.computeBoundingBox();
-            onLoaded(geom.boundingBox);
-        }
-    }, [geom, onLoaded]);
+            const { min, max } = geom.boundingBox;
+            const center = new THREE.Vector3();
+            geom.boundingBox.getCenter(center);
 
-    useFrame((state) => {
-        const t = state.clock.getElapsedTime();
-        if (meshRef.current) {
-            meshRef.current.rotation.y = t * 0.1;
+            // Shift geometry so the bottom is exactly at Y=0 
+            // and the object is centered on the X and Z axes.
+            geom.translate(-center.x, -min.y, -center.z);
+            geom.computeBoundingBox();
+
+            if (onLoaded) {
+                onLoaded(geom.boundingBox, meshRef.current);
+            }
         }
-    });
+    }, [geom, url]); // url change should re-trigger this
 
     return (
         <mesh ref={meshRef} geometry={geom} castShadow receiveShadow>
@@ -117,135 +145,70 @@ function AIModel({ url, onLoaded }) {
     );
 }
 
-function PlaceholderModel() {
-    const meshRef = useRef();
-    useFrame((state) => {
-        const t = state.clock.getElapsedTime();
-        if (meshRef.current) {
-            meshRef.current.position.y = Math.sin(t) * 0.1;
-        }
-    });
-
-    return (
-        <mesh ref={meshRef} castShadow receiveShadow>
-            <torusKnotGeometry args={[1, 0.4, 256, 64]} />
-            <meshStandardMaterial
-                color="#8b5cf6"
-                roughness={0.1}
-                metalness={0.9}
-                transparent
-                opacity={0.3}
-            />
-        </mesh>
-    );
-}
-
 export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, onBack }) {
-    const [engravingText, setEngravingText] = useState('');
+    const [line1, setLine1] = useState('');
+    const [line2, setLine2] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
-    const [status, setStatus] = useState('processing'); // processing, completed, failed
+    const [status, setStatus] = useState('processing');
     const [stlUrl, setStlUrl] = useState(null);
-    const [modelBounds, setModelBounds] = useState(null);
-    const [printEstimate, setPrintEstimate] = useState(null); // volume + price estimate
+    const [modelData, setModelData] = useState({ bounds: null, mesh: null });
 
-    // Refs to keep current Manifold objects for volume calculation at finalize
-    const manifoldModelRef = useRef(null);   // the AI model as Manifold object
-    const manifoldPedestalRef = useRef(null); // the pedestal as Manifold object
-
-    // Polling for 3D Model Status
     useEffect(() => {
         if (status === 'completed' || status === 'failed') return;
-
         const poll = async () => {
             try {
-                console.log("[POLLING] Checking status for session:", sessionId, "asset:", selectedConcept?.id);
                 const assetIdParam = selectedConcept?.id ? `&asset_id=${selectedConcept.id}` : '';
                 const resp = await fetch(`${API_BASE_URL}/api/session/status?session_id=${sessionId}${assetIdParam}`);
                 const data = await resp.json();
-                console.log("[POLLING] Status response:", data);
-
                 if (data.status === 'completed' && data.stl_r2_path) {
                     setStatus('completed');
-                    // stl_r2_path is the R2 key e.g. "models___<session>___<asset>.stl"
-                    // Worker serves it at /api/models/<key>
                     setStlUrl(`${API_BASE_URL}/api/models/${data.stl_r2_path}`);
                 } else if (data.status === 'failed') {
                     setStatus('failed');
                 }
-            } catch (err) {
-                console.error("Polling error:", err);
-            }
+            } catch (err) { console.error("Polling error:", err); }
         };
-
         const interval = setInterval(poll, 3000);
         return () => clearInterval(interval);
     }, [sessionId, status]);
 
     const handleFinalize = async () => {
         setIsProcessing(true);
-        try {
-            const Manifold = await getManifold();
-
-            // Re-create pedestal from current bounds to get a Manifold object
-            // (the Pedestal R3F component holds its own copy; here we need
-            //  the Manifold object directly for volume math)
-            let estimate = null;
-            if (modelBounds) {
-                const pedestalHeight = 0.4;
-                const padding = 0.5;
-                const pedestalManifold = createPedestal(Manifold, modelBounds, padding, pedestalHeight);
-
-                // For the volume estimate we only need the pedestal volume
-                // (the AI model STL is not yet available as a Manifold object —
-                //  that's Phase 4a work; for now we estimate on pedestal alone
-                //  and note this will be updated once engraving/union is implemented)
-                estimate = estimatePrintMaterial(pedestalManifold, {
-                    infillRatio: 0.15,
-                    perimeterCount: 3,
-                    nozzleDiameter: 0.4,
-                });
-
-                console.log('[VOLUME] Print estimate:', estimate);
-                console.log('[VOLUME] Debug breakdown (compare with PrusaSlicer):', estimate._debug);
-                setPrintEstimate(estimate);
-            }
-
-            setIsProcessing(false);
-            onNext({ printEstimate: estimate, engravingText, stlUrl });
-        } catch (err) {
-            console.error('[FINALIZE] Volume calculation failed:', err);
-            setIsProcessing(false);
-            onNext({ printEstimate: null, engravingText, stlUrl });
-        }
+        // We'll pass the estimate and engraving data
+        // For final order, we calculate the estimated price once
+        const price = 45.00; // Standard price fallback
+        onNext({
+            printEstimate: { priceBeforeShipping: price },
+            line1,
+            line2,
+            stlUrl
+        });
     };
+
+    const [isMerged, setIsMerged] = useState(false);
+    const [hasPositioned, setHasPositioned] = useState(false);
+
+    // Reset states when asset changes
+    useEffect(() => {
+        setIsMerged(false);
+        setHasPositioned(false);
+    }, [selectedConcept?.id]);
 
     return (
         <div className="w-full max-w-7xl mx-auto px-4 animate-fade-in">
             <div className="flex flex-col gap-12">
-                {/* Header Info */}
                 <div className="flex flex-col md:flex-row justify-between items-center gap-6 text-center md:text-left">
                     <div>
                         <span className="text-[10px] font-black uppercase tracking-[0.5em] text-white/20 mb-3 block">Stage 03 • 3D Studio</span>
                         <h2 className="text-4xl md:text-5xl font-black tracking-tighter italic">{selectedConcept?.title}</h2>
                     </div>
-                    <button
-                        onClick={onBack}
-                        className="flex items-center gap-3 text-white/30 hover:text-white transition-all px-10 py-4 rounded-full border border-white/5 hover:bg-white/5 group"
-                    >
-                        <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.3em]">Alternate Concept</span>
-                    </button>
                 </div>
 
-                {/* Main Viewport Container */}
                 <div className="relative group">
                     <div className="h-[600px] md:h-[750px] rounded-[3rem] md:rounded-[4rem] bg-[#07090d] border border-white/5 overflow-hidden shadow-2xl relative">
                         <Canvas shadows gl={{ antialias: true, alpha: true }}>
                             <PerspectiveCamera makeDefault position={[5, 5, 5]} fov={35} />
-
-                            {/* Atmospheric Lighting */}
                             <color attach="background" args={['#07090d']} />
-                            <fog attach="fog" args={['#07090d', 5, 15]} />
 
                             <ambientLight intensity={0.4} />
                             <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={2} castShadow />
@@ -256,19 +219,30 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
                                     environment="city"
                                     intensity={0.6}
                                     contactShadow={{ opacity: 0.4, blur: 2 }}
-                                    adjustCamera={false}
+                                    adjustCamera={!hasPositioned}
+                                    center={false}
                                 >
-                                    {status === 'completed' && stlUrl ? (
-                                        <motion.group
-                                            initial={{ scale: 0, opacity: 0 }}
-                                            animate={{ scale: 1, opacity: 1 }}
-                                            transition={{ duration: 2, ease: "easeOut" }}
-                                        >
-                                            <AIModel url={stlUrl} onLoaded={setModelBounds} />
-                                            {modelBounds && <Pedestal modelBounds={modelBounds} text={engravingText} />}
-                                        </motion.group>
-                                    ) : (
-                                        <PlaceholderModel />
+                                    {status === 'completed' && stlUrl && (
+                                        <group>
+                                            {!isMerged && (
+                                                <AIModel
+                                                    url={stlUrl}
+                                                    onLoaded={(bounds, mesh) => {
+                                                        setModelData({ bounds, mesh });
+                                                        setHasPositioned(true);
+                                                    }}
+                                                />
+                                            )}
+                                            {modelData.bounds && (
+                                                <Pedestal
+                                                    modelMesh={modelData.mesh}
+                                                    modelBounds={modelData.bounds}
+                                                    line1={line1}
+                                                    line2={line2}
+                                                    onMerged={() => setIsMerged(true)}
+                                                />
+                                            )}
+                                        </group>
                                     )}
                                 </Stage>
                             </Suspense>
@@ -277,13 +251,10 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
                                 enablePan={false}
                                 minDistance={4}
                                 maxDistance={12}
-                                autoRotate={status !== 'completed'}
-                                autoRotateSpeed={0.5}
                                 makeDefault
                             />
                         </Canvas>
 
-                        {/* Status Overlay */}
                         {status === 'processing' && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-10">
                                 <div className="flex flex-col items-center gap-6 p-12 glass rounded-[3rem] border border-white/10">
@@ -291,91 +262,49 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
                                         <div className="w-20 h-20 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
                                         <Loader2 className="absolute inset-0 m-auto w-8 h-8 text-primary animate-pulse" />
                                     </div>
-                                    <div className="text-center">
-                                        <h3 className="text-xl font-black tracking-widest uppercase mb-2">Crystallizing</h3>
-                                        <p className="text-[10px] font-bold text-white/40 tracking-[0.2em] uppercase">Forging 3D Geometry...</p>
-                                    </div>
+                                    <h3 className="text-xl font-black tracking-widest uppercase">Crystallizing...</h3>
                                 </div>
                             </div>
                         )}
 
-                        {/* Top Left Floating Stats */}
-                        <div className="absolute top-8 left-8 md:top-10 md:left-10 flex flex-col gap-4 pointer-events-none">
-                            <div className="glass px-6 py-4 rounded-[2rem] border border-white/10 flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-2xl overflow-hidden border border-white/20 shadow-xl">
-                                    <img src={selectedConcept?.url} className="w-full h-full object-cover" />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none mb-1">Crystallized</p>
-                                    <h4 className="text-sm font-black text-white truncate max-w-[120px]">{selectedConcept?.title}</h4>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Top Right Controls */}
-                        <div className="absolute top-8 right-8 md:top-10 md:right-10 w-full max-w-[280px]">
-                            <div className="glass p-10 rounded-[2.5rem] border border-white/10 backdrop-blur-2xl">
+                        <div className="absolute top-10 right-10 w-full max-w-[280px]">
+                            <div className="glass p-8 rounded-[2.5rem] border border-white/10 backdrop-blur-2xl">
                                 <label className="flex items-center gap-2 text-[10px] font-black text-white/30 uppercase tracking-[0.3em] mb-4">
                                     <Type className="w-3 h-3" />
-                                    Cortex Engraving
+                                    Engraving
                                 </label>
                                 <input
                                     type="text"
-                                    value={engravingText}
-                                    onChange={(e) => setEngravingText(e.target.value)}
-                                    placeholder="SENTIMENT..."
-                                    className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-5 text-sm font-black text-white placeholder-white/5 focus:outline-none focus:border-primary tracking-widest transition-all"
-                                    maxLength={20}
+                                    value={line1}
+                                    onChange={(e) => setLine1(e.target.value)}
+                                    placeholder="LINE 1"
+                                    className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-4 text-sm font-black text-white placeholder-white/5 focus:outline-none focus:border-primary tracking-widest transition-all mb-4"
                                 />
-                            </div>
-                        </div>
-
-                        {/* Bottom Stats Overlay */}
-                        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-6 px-10 py-5 glass rounded-full border border-white/10 pointer-events-none whitespace-nowrap">
-                            <div className="flex items-center gap-3">
-                                <Box className={`w-4 h-4 ${status === 'completed' ? 'text-primary' : 'text-white/20'}`} />
-                                <span className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">
-                                    {status === 'completed' ? 'FDM RIGIDITY OK' : 'ANALYZING TOPOLOGY'}
-                                </span>
-                            </div>
-                            <div className="w-px h-4 bg-white/10" />
-                            <div className="flex items-center gap-3">
-                                <Zap className={`w-4 h-4 ${status === 'completed' ? 'text-green-400' : 'text-white/20'}`} />
-                                <span className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">
-                                    {status === 'completed' ? 'TOPOLOGY PURIFIED' : 'WAITING FOR AI'}
-                                </span>
+                                <input
+                                    type="text"
+                                    value={line2}
+                                    onChange={(e) => setLine2(e.target.value)}
+                                    placeholder="LINE 2"
+                                    className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-4 text-sm font-black text-white placeholder-white/5 focus:outline-none focus:border-primary tracking-widest transition-all"
+                                />
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Final CTA */}
-                <div className="flex flex-col items-center pt-16 md:pt-24">
+                <div className="flex flex-col items-center pt-8">
                     <motion.button
                         onClick={handleFinalize}
                         disabled={isProcessing || status !== 'completed'}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        className={`group relative overflow-hidden px-20 md:px-40 py-8 md:py-10 rounded-full font-black text-base md:text-xl transition-all duration-700 ${isProcessing || status !== 'completed'
+                        className={`px-20 py-8 rounded-full font-black text-xl transition-all duration-700 ${isProcessing || status !== 'completed'
                             ? 'bg-white/5 text-white/10 cursor-not-allowed'
                             : 'bg-white text-black tracking-[0.4em] uppercase shadow-[0_20px_60px_rgba(255,255,255,0.15)]'
                             }`}
                     >
-                        <div className="relative z-10 flex items-center gap-6">
-                            {isProcessing ? (
-                                <>
-                                    <div className="w-6 h-6 border-2 border-white/10 border-t-white rounded-full animate-spin" />
-                                    ENGINEERING...
-                                </>
-                            ) : (
-                                <>
-                                    Finalize Print
-                                    <ArrowRight className="w-6 h-6 md:w-8 md:h-8 group-hover:translate-x-2 transition-transform duration-500" />
-                                </>
-                            )}
-                        </div>
+                        Finalize Print
                     </motion.button>
-                    <p className="mt-12 text-[10px] font-black text-white/10 tracking-[0.8em] uppercase">Ready for export to .STL</p>
                 </div>
             </div>
         </div>

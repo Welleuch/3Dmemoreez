@@ -49,6 +49,12 @@
    │  • Fetches STL via /api/assets/{stl_r2_path}
    │  • Loads and renders in React Three Fiber
    ▼
+[3D Studio Geometry Engine]
+   │  • BVH-CSG: High-performance boolean operations in browser.
+   │  • Normalized Grounding: Figurine translated to Y=0 to anchor pedestal.
+   │  • Cylindrical Vertex Wrapping: Text bent to match pedestal arc.
+   │  • Constant-Depth Engraving: 0.4mm depth (0.04 units) for FDM compliance.
+   ▼
 [3D Viewer + Pedestal + Engraving]
 ```
 
@@ -103,7 +109,8 @@
 │   │   ├── ThreeSceneViewer.jsx  ← Step 3: 3D Studio (polls status, loads STL)
 │   │   └── Checkout.jsx          ← Step 4: Order confirmation
 │   ├── lib/
-│   │   └── manifold.js           ← Manifold WASM: pedestal gen + engraving (in progress)
+│   │   ├── csgEngine.js          ← BVH-CSG: pedestal union, wrapping & engraving
+│   │   └── api.js                ← API client for Cloudflare Worker
 │   └── index.css                 ← Global design tokens (Deep Glass & Space theme)
 │
 ├── backend/

@@ -37,9 +37,15 @@ export default function App() {
     const [selectedConcept, setSelectedConcept] = useState(null);
     const [sessionId, setSessionId] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [finalizedData, setFinalizedData] = useState(null);
 
     const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
     const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
+
+    const handleFinalize = (data) => {
+        setFinalizedData(data);
+        nextStep();
+    };
 
     const handleInputSubmit = async (data) => {
         setFormData(data);
@@ -157,13 +163,14 @@ export default function App() {
                                     <ThreeSceneViewer
                                         selectedConcept={selectedConcept}
                                         sessionId={sessionId}
-                                        onNext={nextStep}
+                                        onNext={handleFinalize}
                                         onBack={prevStep}
                                     />
                                 )}
                                 {currentStep === 3 && (
                                     <Checkout
                                         selectedConcept={selectedConcept}
+                                        finalizedData={finalizedData}
                                         onBack={prevStep}
                                     />
                                 )}

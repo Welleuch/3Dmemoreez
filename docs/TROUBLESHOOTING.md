@@ -162,7 +162,39 @@ cd backend\ai_engine
 This caches the model at `~/.u2net/isnet-general-use.onnx` (or similar). After this the engine loads it instantly at startup.
 
 ---
-
+ 
+ ## ❌ Error 6 — Engraving Clipped or Missing
+ 
+ ### Symptom
+ Text appears "half-buried" or completely missing on the circular pedestal.
+ 
+ ### Root Cause
+ Flat text geometry does not naturally follow a curved surface. Thin text float in the air at the edges of the word (the "Ruler against a Bottle" effect).
+ 
+ ### ✅ Fix Applied (Cylindrical Wrapping)
+ **Don't use flat subtraction.** The system now uses **Cylindrical Vertex Wrapping**:
+ - `csgEngine.js` contains a `wrapGeometry` function.
+ - It bends the text vertices to a perfect polar arc matching the pedestal radius.
+ - Engraving depth is set to a constant **0.4mm** (0.04 units) for high-quality FDM printing.
+ 
+ ---
+ 
+ ## ❌ Error 7 — CSG Mismatch: "Attribute uv not available"
+ 
+ ### Symptom
+ The CSG union fails silently or crashes the browser when merging the figurine and pedestal.
+ 
+ ### Root Cause
+ Different geometries (STLs vs. Three.js primitives) have different vertex attributes. If one mesh has UV coordinates and the other doesn't, the CSG evaluator crashes.
+ 
+ ### ✅ Fix Applied
+ **Attribute Sanitization**:
+ - The engine now stripped away all attributes except `position` and `normal` before any CSG operation.
+ - `evaluator.attributes = ['position', 'normal']` is set globally.
+ - Both the text and figurine geometries are passed through a sanitizer that creates a clean `BufferGeometry` with only these two attributes.
+ 
+ ---
+ 
 ## 🚀 Correct Local Dev Startup (Definitive)
 
 Run these in order. Each in its own terminal:

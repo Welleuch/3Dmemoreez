@@ -81,7 +81,8 @@ Generate 4 concepts:
 - 2 Literal: Sturdy, fused mashups of the objects.
 - 2 Artistic: Solid, sculptural, low-poly or clay-sculpted aesthetic.
 
-CRITICAL: Return ONLY a raw JSON object. No conversational text. No markdown formatting.
+CRITICAL: Return ONLY a raw JSON object. NO conversational text. NO preamble (e.g., "Here are the prompts"). NO markdown code blocks.
+START your response with "{" and END with "}".
 Structure:
 {
   "concepts": [
