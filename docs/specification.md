@@ -1,7 +1,7 @@
 # 3Dmemoreez — Product Specification
 
-> Last updated: 2026-02-21
-> Status: **Phase 3 Complete ✅ | Phase 4 (Engraving + Slicer + Checkout) — NEXT**
+> Last updated: 2026-02-23
+> Status: **Phase 4 Complete ✅ | Testing Infrastructure Complete ✅ | Phase 4d (Payment + Email) — NEXT**
 
 ---
 
@@ -21,14 +21,16 @@ The platform prioritizes:
 | Layer | Technology | Status |
 |---|---|---|
 | **Frontend** | React (Vite) + React Three Fiber | ✅ Live |
-| **3D Geometry Engine** | Manifold WASM (in-browser) | 🟡 Pedestal done, engraving next |
+| **3D Geometry Engine** | three-bvh-csg (in-browser) | ✅ Complete |
 | **AI Orchestration** | Cloudflare Workers (Llama 3 + Flux Schnell) | ✅ Deployed |
 | **Image Preprocessing** | rembg `isnet-general-use` (local, in AI engine) | ✅ Working |
 | **Mesh Generation** | Hunyuan3D-V2-FP16 via local venv/uvicorn | ✅ Working |
-| **Slicing Engine** | PrusaSlicer CLI in local Docker container | 🔴 To build |
+| **Slicing Engine** | PrusaSlicer CLI in local Docker container | ✅ Working |
 | **Storage** | Cloudflare R2 (images, STL, G-code) | ✅ Active |
 | **Database** | Cloudflare D1 (sessions, assets, orders) | ✅ Active |
 | **Dev Bridge** | Localtunnel → localhost:8000 (AI engine) | ✅ Active |
+| **Testing** | Vitest + Playwright + pytest | ✅ Complete |
+| **CI/CD** | GitHub Actions | ✅ Active |
 | **Payment** | Stripe | 🔴 To integrate |
 | **Email** | Resend (transactional) | 🔴 To integrate |
 
@@ -261,10 +263,11 @@ Formula: `price = (material_grams × 0.03) + 12.00 + shipping`
 | 1 | Cloudflare Worker + Llama + Flux + React UI | ✅ Complete |
 | 2 | Local AI Engine Bridge (Hunyuan3D, ComfyUI-free) | ✅ Complete |
 | 3 | Background removal (rembg isnet), RGBA fix, Flux/Llama prompt fix | ✅ Complete |
-| **4a** | **Manifold engraving (Text3D → difference → union)** | 🔴 Next |
-| **4b** | **PrusaSlicer Docker image (local test)** | 🔴 Next |
-| **4c** | **Checkout UI + pricing display from slicer output** | 🔴 Next |
+| **4a** | **three-bvh-csg engraving (Text3D → difference → union)** | ✅ Complete |
+| **4b** | **PrusaSlicer Docker image (local test)** | ✅ Complete |
+| **4c** | **Checkout UI + pricing display from slicer output** | ✅ Complete |
 | **4d** | **Stripe payment + Resend confirmation emails** | 🔴 Next |
+| **Testing** | **Comprehensive test infrastructure (unit, integration, E2E)** | ✅ Complete |
 | 5 | RunPod deployment for GPU mesh generation | ⏳ Later |
 | 6 | Cloudflare Containers for slicer (production) | ⏳ Later |
 | 7 | Admin dashboard (`/admin`) + fulfillment flow | ⏳ Later |

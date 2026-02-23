@@ -1,61 +1,75 @@
 # Dependencies
-node_modules
+node_modules/
 .pnp
 .pnp.js
 
 # Testing
-coverage
+coverage/
+.nyc_output
+playwright-report/
+test-results/
+htmlcov/
+.coverage
+.pytest_cache/
+*.pyc
+__pycache__/
 
 # Production
-dist
+dist/
+build/
 
-# Misc
-.DS_Store
-*.pem
-
-# Cloudflare Wrangler
-.wrangler
-.dev.vars
-
-# Local env files
+# Environment
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-# IDEs
-.vscode
-.idea
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Editor
+.vscode/
+.idea/
 *.swp
 *.swo
+*~
 
-# Temporary files
-tmp
-temp
+# OS
+.DS_Store
+Thumbs.db
+
+# Cloudflare
+.wrangler/
+.dev.vars
 
 # Python
-backend/ai_engine/venv/
-backend/ai_engine/__pycache__/
-backend/ai_engine/**/__pycache__/
-backend/ai_engine/**/*.pyc
-backend/ai_engine/**/*.pyo
-*.pyc
-*.pyo
-__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
 
-# Model weights (too large for git)
-backend/ai_engine/models/
-*.safetensors
-*.ckpt
-*.pt
-*.pth
-*.bin
+# AI Models (large files)
+backend/ai_engine/models/*.safetensors
+backend/ai_engine/models/*.ckpt
+backend/ai_engine/models/*.pth
 
-# Generated STL outputs
-output_*.stl
+# Test outputs
 test_result.stl
+*.test.stl
+*.test.gcode
 
-# Python test artifacts
-.pytest_cache/
-*.egg-info/
+# Slicer temporary outputs
+backend/slicer/output/*.gcode
+backend/slicer/input/*.stl
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

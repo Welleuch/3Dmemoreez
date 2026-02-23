@@ -43,7 +43,8 @@ You do NOT need to run: npx wrangler dev --remote
 You DO need to run:
   1. .\venv\Scripts\uvicorn.exe main:app --host 0.0.0.0 --port 8000 --reload  (in backend/ai_engine)
   2. npx localtunnel --port 8000 --subdomain 3dmemoreez-ai                    (in project root)
-  3. npm run dev                                                                (in project root)
+  3. docker-compose up -d                                                     (in backend/slicer - for pricing)
+  4. npm run dev                                                                (in project root)
 ```
 
 ---
@@ -191,10 +192,74 @@ This caches the model at `~/.u2net/isnet-general-use.onnx` (or similar). After t
  **Attribute Sanitization**:
  - The engine now stripped away all attributes except `position` and `normal` before any CSG operation.
  - `evaluator.attributes = ['position', 'normal']` is set globally.
- - Both the text and figurine geometries are passed through a sanitizer that creates a clean `BufferGeometry` with only these two attributes.
- 
- ---
- 
+  - Both the text and figurine geometries are passed through a sanitizer that creates a clean `BufferGeometry` with only these two attributes.
+
+---
+
+## ❌ Error 8 — Slicer Returns 0g / "Value out of range: fill_density"
+
+### Symptom
+Slicer returns `"material_grams": 0.0` even though G-code is generated (~22MB).
+
+### Root Cause
+Two issues:
+1. **Missing filament density:** Without `--filament-density=1.24` (PLA), PrusaSlicer can't calculate grams. The gcode shows `filament_density = 0`.
+2. **Wrong support flag:** `--supports-enable` is not a valid PrusaSlicer CLI option.
+
+### ✅ Fix Applied (`backend/slicer/main.py`)
+```python
+SLICER_CONFIG = {
+    "nozzle_diameter": 0.4,
+    "layer_height": 0.2,  # Updated from 0.25mm for accurate estimates
+    "infill": "20%",
+    "filament_type": "PLA",
+    "filament_density": 1.24,  # ← ADD THIS (PLA density in g/cm³)
+    ...
+}
+
+# CLI command:
+"--support-material" if SLICER_CONFIG["support_material"] else "--no-support-material"
+```
+
+### Key CLI Options for PrusaSlicer
+- `--fill-density=20%` (percentage format)
+- `--filament-density=1.24` (required for gram calculation)
+- `--support-material` / `--no-support-material` (NOT `--supports-enable`)
+- `--layer-height=0.25`
+- `--nozzle-diameter=0.4`
+
+---
+
+## ❌ Error 9 — Slicer Model Dimensions Wrong / Off by ~25x
+
+### Symptom
+Slicer produces vastly incorrect material estimates (e.g., 790g instead of ~80g for a 100mm model).
+
+### Root Cause
+**STL files don't store unit metadata.** Hunyuan3D exports in inches, but trimesh reads them as millimeters.
+
+- trimesh reports: `1.95 × 1.99 × 0.95` (interprets as mm)
+- Actual size: `1.95 × 1.99 × 0.95` inches = `49.6 × 50.5 × 24.2` mm
+
+### ✅ Fix Applied (`backend/slicer/main.py`)
+```python
+# STL files don't store units - Hunyuan3D exports in inches
+# Convert from inches to mm (1 inch = 25.4mm)
+current_dims_mm = raw_extents * 25.4  # [X, Y, Z] in mm
+
+# Scale so the largest dimension fits within TARGET_HEIGHT_MM
+max_dim = max(current_dims_mm)
+scale_factor = TARGET_HEIGHT_MM / max_dim
+combined_scale = 25.4 * scale_factor
+scaled_mesh.apply_scale(combined_scale)
+```
+
+### Key Insight
+- STL files have NO unit information
+- Hunyuan3D outputs in inches (most 3D apps default to inches)
+- Must multiply by 25.4 to convert to mm
+- Then scale to target height (100mm)
+
 ## 🚀 Correct Local Dev Startup (Definitive)
 
 Run these in order. Each in its own terminal:

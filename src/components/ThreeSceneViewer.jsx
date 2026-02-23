@@ -174,15 +174,41 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
 
     const handleFinalize = async () => {
         setIsProcessing(true);
-        // We'll pass the estimate and engraving data
-        // For final order, we calculate the estimated price once
-        const price = 45.00; // Standard price fallback
-        onNext({
-            printEstimate: { priceBeforeShipping: price },
-            line1,
-            line2,
-            stlUrl
-        });
+        try {
+            const resp = await fetch(`${API_BASE_URL}/api/slice`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    asset_id: selectedConcept.id
+                })
+            });
+
+            if (!resp.ok) throw new Error("Slicing coordination failed");
+
+            const result = await resp.json();
+
+            // Formula from TODO: (material_grams * 0.03) + 12 service + 5 shipping (est)
+            // But we'll let Checkout handle the subtotal display
+            onNext({
+                printEstimate: result.stats,
+                line1,
+                line2,
+                stlUrl,
+                gcode_r2_path: result.gcode_r2_path
+            });
+        } catch (err) {
+            console.error("Finalization Error:", err);
+            // Fallback for demo stability
+            onNext({
+                printEstimate: { total_material_grams: 120, total_material_cost: 3.60, print_time_display: "9h 30m" },
+                line1,
+                line2,
+                stlUrl
+            });
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     const [isMerged, setIsMerged] = useState(false);

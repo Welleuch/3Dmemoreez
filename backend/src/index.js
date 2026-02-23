@@ -33,7 +33,14 @@ export default {
                 const headers = new Headers(corsHeaders);
                 object.writeHttpMetadata(headers);
                 headers.set("etag", object.httpEtag);
-                headers.append("Content-Type", "image/png"); // Flux returns PNG/JPEG
+
+                if (key.endsWith(".gcode")) {
+                    headers.append("Content-Type", "text/plain");
+                } else if (key.endsWith(".stl")) {
+                    headers.append("Content-Type", "model/stl");
+                } else {
+                    headers.append("Content-Type", "image/png"); // Default for Flux
+                }
 
                 return new Response(object.body, { headers });
             }
@@ -72,10 +79,13 @@ EVERY prompt MUST produce an image that looks like a professional product photo:
 2. Overhangs: Avoid angles steeper than 45 degrees. Use organic, tapered transitions.
 3. Thickness: No part thinner than 2.0mm. No whisker or hair textures.
 
-=== SAFETY ===
-- NO HUMAN SKIN or Realistic Human Features.
-- Focus on STYLIZED FIGURINES, MONOLITHIC STATUES, or CLAY SCULPTURES.
-- Use object-centric language (e.g., "A gray clay figurine of a swimmer" NOT "A realistic swimmer").
+=== SAFETY & COMPLIANCE — CRITICAL ===
+- NO HUMAN SKIN, NO realistic anatomy, NO provocative poses.
+- EVERYTHING must be SFW and family-friendly.
+- If depicting humans: they MUST be fully clothed in thick, sculptural clothing or depicted as abstract, non-anatomical stone/clay silhouettes.
+- Focus on inanimate objects, animals, or highly stylized, clothed figurines.
+- Avoid any terms that could be interpreted as anatomical or fetishistic.
+- Use object-centric language (e.g., "A gray clay figurine of a hiker in a heavy coat" NOT "A realistic hiker").
 
 Generate 4 concepts:
 - 2 Literal: Sturdy, fused mashups of the objects.
@@ -119,7 +129,7 @@ Structure:
 
                 // 3.2 Flux Image Generation (Parallel)
                 // Hard-coded suffix appended to every Flux prompt to guarantee white-background product shot
-                const FLUX_SUFFIX = ", gray matte clay sculpture, pure white studio background, product photography, isolated object, no shadows, no gradient, no environment, flat even lighting, professional product shot";
+                const FLUX_SUFFIX = ", gray matte clay sculpture, SFW, family friendly, fully clothed, pure white studio background, product photography, isolated object, no shadows, no gradient, no environment, flat even lighting, professional product shot";
 
                 const generationPromises = result.concepts.map(async (concept) => {
                     try {
@@ -327,6 +337,70 @@ Structure:
                 const headers = new Headers(corsHeaders);
                 headers.set("Content-Type", "model/stl");
                 return new Response(object.body, { headers });
+            }
+
+            // 8. Trigger Slicer logic
+            if (url.pathname === "/api/slice" && request.method === "POST") {
+                const { session_id, asset_id } = await request.json();
+
+                // Get STL from DB to find the R2 path
+                const asset = await env.DB.prepare(
+                    "SELECT stl_r2_path FROM Assets WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
+                ).bind(session_id, asset_id, `%${asset_id}%`).first();
+
+                if (!asset || !asset.stl_r2_path) {
+                    return new Response(JSON.stringify({ error: "STL not found or not ready" }), { status: 404, headers: corsHeaders });
+                }
+
+                // Fetch STL binary from R2
+                const stlObject = await env.ASSETS_BUCKET.get(asset.stl_r2_path);
+                if (!stlObject) {
+                    return new Response(JSON.stringify({ error: "STL file not found in R2" }), { status: 404, headers: corsHeaders });
+                }
+
+                const SLICER_URL = env.SLICER_URL || "https://3dmemoreez-slicer.loca.lt/slice";
+
+                const formData = new FormData();
+                const stlArrayBuffer = await stlObject.arrayBuffer();
+                formData.append("file", new Blob([stlArrayBuffer]), "model.stl");
+
+                const slicerRes = await fetch(SLICER_URL, {
+                    method: "POST",
+                    body: formData,
+                    headers: { "bypass-tunnel-reminder": "true" }
+                });
+
+                if (!slicerRes.ok) {
+                    throw new Error(`Slicer API returned ${slicerRes.status}`);
+                }
+
+                const slicerData = await slicerRes.json();
+
+                if (slicerData.status === "success" && slicerData.gcode_filename) {
+                    // Fetch G-code from slicer
+                    const slicerBaseUrl = new URL(SLICER_URL).origin;
+                    const gcodeUrl = `${slicerBaseUrl}/gcode/${slicerData.gcode_filename}`;
+                    const gcodeRes = await fetch(gcodeUrl, { headers: { "bypass-tunnel-reminder": "true" } });
+
+                    if (!gcodeRes.ok) throw new Error("Failed to download G-code from slicer");
+
+                    // Save G-code to R2
+                    const gcodeKey = `gcode___${session_id}___${asset_id}.gcode`;
+                    await env.ASSETS_BUCKET.put(gcodeKey, await gcodeRes.arrayBuffer(), {
+                        httpMetadata: { contentType: "text/plain" }
+                    });
+
+                    const gcodeR2Path = `/api/assets/${gcodeKey}`;
+
+                    // Respond with pricing stats and gcode path
+                    return new Response(JSON.stringify({
+                        success: true,
+                        stats: slicerData.stats,
+                        gcode_r2_path: gcodeR2Path
+                    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+                } else {
+                    throw new Error(slicerData.detail || "Slicer failed to return success");
+                }
             }
 
             return new Response("Not Found", { status: 404, headers: corsHeaders });

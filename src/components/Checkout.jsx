@@ -2,7 +2,15 @@ import { ChevronLeft, CreditCard, Box, Truck, ShieldCheck, Sparkles } from 'luci
 import { motion } from 'framer-motion';
 
 export default function Checkout({ selectedConcept, finalizedData, onBack }) {
-    const price = finalizedData?.printEstimate?.priceBeforeShipping || 45.00;
+    const stats = finalizedData?.printEstimate || {};
+    const materialGrams = stats.total_material_grams || 0;
+    const materialCost = stats.total_material_cost || 0;
+    const printTimeDisplay = stats.print_time_display || "—";
+
+    const baseServiceFee = 12.00;
+    const shippingFee = 9.00;
+    const totalInvestment = materialCost + baseServiceFee + shippingFee;
+
     const line1 = finalizedData?.line1;
     const line2 = finalizedData?.line2;
 
@@ -33,6 +41,16 @@ export default function Checkout({ selectedConcept, finalizedData, onBack }) {
                                 <h3 className="text-3xl md:text-4xl font-black text-white tracking-tighter mb-4 italic leading-none">{selectedConcept?.title}</h3>
                                 <div className="text-white/40 text-sm md:text-lg font-light leading-relaxed mb-8">
                                     <p className="mb-2">3D Printed in <span className="text-white/60 font-bold italic">Premium Matte Gray PLA</span>. Optimized for Prusa FDM technology with a solid structural base.</p>
+                                    <div className="grid grid-cols-2 gap-4 mt-6">
+                                        <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-white/20 mb-1">Mass</p>
+                                            <p className="text-white font-black tracking-tighter text-2xl italic">{materialGrams}g</p>
+                                        </div>
+                                        <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-white/20 mb-1">Print Duration</p>
+                                            <p className="text-white font-black tracking-tighter text-2xl italic">{printTimeDisplay}</p>
+                                        </div>
+                                    </div>
                                     {(line1 || line2) && (
                                         <div className="mt-4 p-4 bg-white/5 rounded-2xl border border-white/5">
                                             <p className="text-[10px] font-black uppercase tracking-widest text-primary/60 mb-2">Custom Engraving</p>
@@ -97,16 +115,20 @@ export default function Checkout({ selectedConcept, finalizedData, onBack }) {
 
                             <div className="space-y-6 mb-12">
                                 <div className="flex justify-between text-white/40 font-light text-lg">
-                                    <span>Dimensional Sculpture</span>
-                                    <span className="text-white/80 font-black tracking-tighter">${price.toFixed(2)}</span>
+                                    <span>Dimensional Material</span>
+                                    <span className="text-white/80 font-black tracking-tighter">${materialCost.toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between text-white/40 font-light text-lg">
-                                    <span>Priority Quantum Transit</span>
-                                    <span className="text-white/80 font-black tracking-tighter text-green-400">FREE</span>
+                                    <span>AI Service & Modeling</span>
+                                    <span className="text-white/80 font-black tracking-tighter">${baseServiceFee.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between text-white/40 font-light text-lg">
+                                    <span>Priority Transit</span>
+                                    <span className="text-white/80 font-black tracking-tighter">${shippingFee.toFixed(2)}</span>
                                 </div>
                                 <div className="pt-6 border-t border-white/5 flex justify-between items-end">
                                     <span className="text-lg font-black uppercase tracking-widest text-white/20 leading-none">Total Investment</span>
-                                    <span className="text-5xl md:text-6xl font-black tracking-tighter italic text-white leading-none">${price.toFixed(2)}</span>
+                                    <span className="text-5xl md:text-6xl font-black tracking-tighter italic text-white leading-none">${totalInvestment.toFixed(2)}</span>
                                 </div>
                             </div>
 
