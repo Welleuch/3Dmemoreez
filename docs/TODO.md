@@ -212,3 +212,20 @@
 **Test Coverage:** ~50% (target: 80%+)
 **Test Execution Time:** ~4 minutes (target: < 6 minutes)
 **Documentation:** 8 comprehensive guides created
+
+---
+
+## Phase 9: Live Notifications & Email Fulfillment (Next Immediate Goal)
+
+* [ ] **Email Infrastructure:** Update `.dev.vars` with real `RESEND_API_KEY` and verify domain.
+* [ ] **Provider Alerts:** Construct the email template to send G-code link, STL link, and shipping addresses to the admin (`walid.elleuch@outlook.de`) instantly upon payment. Include the reference image and snapshot of the 3D model.
+* [ ] **Client Receipt:** Construct the final customer receipt template with an appealing layout, the selected 2D concept, a snapshot of the 3D model (with pedestal/engraving), and order details.
+
+---
+
+## Phase 10: Multi-Payment Deployments (Upcoming)
+
+* [ ] **Local Stripe configuration:** Update `.dev.vars` with live Stripe API keys.
+* [ ] **Apple Pay & Google Pay:** Configure and verify Stripe wallet elements for instant checkout.
+* [ ] **PayPal Integration:** Implement PayPal as an alternative checkout path.
+* [ ] **Bank Transfers:** Implement SEPA / ACH support for high-value operations.

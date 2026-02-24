@@ -56,16 +56,19 @@ A comprehensive automated testing system has been implemented covering unit, int
 - [ ] Complete E2E test implementation
 - [ ] Add missing integration tests
 
-### 🔴 Priority 1 — Stripe Payment Integration
-- [ ] Implement `stripe.paymentIntents.create` in Worker.
-- [ ] Add Stripe Elements to `Checkout.jsx`.
-- [ ] Handle payment success webhook to update D1 Order status.
-- [ ] Write tests for payment flow
+### 🔴 Priority 1 — Email Fulfillment System (Production Deploy)
+- [ ] **Deploy Resend System:** Add real `RESEND_API_KEY` and verify sending domain.
+- [ ] **Service Provider Alert (Admin):** Ensure you receive a real email (`walid.elleuch@outlook.de`) for every new order, containing the G-code download link, STL download link, exact shipping address, and reference image.
+- [ ] **Customer Receipt:** Send final order confirmation email to the client containing a visually appealing summary, a snapshot of the 3D model with the pedestal/engraving, their selected 2D concept, and shipping data.
+- [ ] Write integration tests for live email sending.
 
-### 🟡 Priority 2 — Email Fulfillment (Resend)
-- [ ] **Customer Receipt:** Send summary + 3D render.
-- [ ] **Service Provider Alert (Admin):** Email you (the creator) with the G-code link, shipping address, and reference image.
-- [ ] Write tests for email sending
+### 🟡 Priority 2 — Payment Gateway Expansion & Deployment
+- [ ] **Deploy Stripe Checkout** with Live API keys.
+- [ ] **Add Google Pay & Apple Pay** (configure via Stripe Checkout settings).
+- [ ] **Integrate PayPal** (via Stripe or direct PayPal gateway).
+- [ ] **Add Bank Transfer Support** (SEPA/ACH/Wire transfer options).
+- [ ] Update `Checkout.jsx` to handle diverse payment method selections.
+- [ ] Handle payment success webhooks for all new methods to update D1 Order status.
 
 ### 🟡 Priority 3 — D1 Schema Expansion
 - [ ] Create `Orders` table to store payment status, shipping addresses, and final asset pointers.

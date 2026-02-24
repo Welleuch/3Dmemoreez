@@ -11,7 +11,9 @@ import * as THREE from 'three';
 import { ChevronLeft, ArrowRight, Type, Box, Zap, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const API_BASE_URL = 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev';
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:8787'
+    : 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev';
 
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry';
 import { extend } from '@react-three/fiber';
@@ -160,10 +162,14 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
                 const assetIdParam = selectedConcept?.id ? `&asset_id=${selectedConcept.id}` : '';
                 const resp = await fetch(`${API_BASE_URL}/api/session/status?session_id=${sessionId}${assetIdParam}`);
                 const data = await resp.json();
-                if (data.status === 'completed' && data.stl_r2_path) {
+
+                // Find the specific asset we are waiting for
+                const currentAsset = data.assets?.find(a => a.id === selectedConcept?.id || a.image_url.includes(selectedConcept?.id));
+
+                if (currentAsset?.status === 'completed' && currentAsset.stl_r2_path) {
                     setStatus('completed');
-                    setStlUrl(`${API_BASE_URL}/api/models/${data.stl_r2_path}`);
-                } else if (data.status === 'failed') {
+                    setStlUrl(`${API_BASE_URL}/api/assets/${currentAsset.stl_r2_path}`);
+                } else if (currentAsset?.status === 'failed') {
                     setStatus('failed');
                 }
             } catch (err) { console.error("Polling error:", err); }
@@ -191,6 +197,7 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
             // Formula from TODO: (material_grams * 0.03) + 12 service + 5 shipping (est)
             // But we'll let Checkout handle the subtotal display
             onNext({
+                sessionId: sessionId,
                 printEstimate: result.stats,
                 line1,
                 line2,
@@ -201,6 +208,7 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
             console.error("Finalization Error:", err);
             // Fallback for demo stability
             onNext({
+                sessionId: sessionId,
                 printEstimate: { total_material_grams: 120, total_material_cost: 3.60, print_time_display: "9h 30m" },
                 line1,
                 line2,
@@ -223,11 +231,18 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
     return (
         <div className="w-full max-w-7xl mx-auto px-4 animate-fade-in">
             <div className="flex flex-col gap-12">
-                <div className="flex flex-col md:flex-row justify-between items-center gap-6 text-center md:text-left">
-                    <div>
+                <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                    <div className="text-center md:text-left">
                         <span className="text-[10px] font-black uppercase tracking-[0.5em] text-white/20 mb-3 block">Stage 03 • 3D Studio</span>
                         <h2 className="text-4xl md:text-5xl font-black tracking-tighter italic">{selectedConcept?.title}</h2>
                     </div>
+                    <button
+                        onClick={onBack}
+                        className="inline-flex items-center gap-3 text-white/30 hover:text-white transition-all px-8 py-4 rounded-full border border-white/5 hover:bg-white/5 group"
+                    >
+                        <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                        <span className="text-[10px] font-black uppercase tracking-[0.3em]">Back to Concepts</span>
+                    </button>
                 </div>
 
                 <div className="relative group">
@@ -318,7 +333,7 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
                     </div>
                 </div>
 
-                <div className="flex flex-col items-center pt-8">
+                <div className="flex flex-col items-center gap-8 pt-8">
                     <motion.button
                         onClick={handleFinalize}
                         disabled={isProcessing || status !== 'completed'}
@@ -331,6 +346,12 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
                     >
                         Finalize Print
                     </motion.button>
+                    <button
+                        onClick={onBack}
+                        className="text-white/20 hover:text-white/50 text-[10px] font-black uppercase tracking-[0.4em] transition-all"
+                    >
+                        Adjust Blueprint Sentiment
+                    </button>
                 </div>
             </div>
         </div>

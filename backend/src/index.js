@@ -1,3 +1,6 @@
+import { Stripe } from 'stripe';
+import { Resend } from 'resend';
+
 export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
@@ -45,6 +48,42 @@ export default {
                 return new Response(object.body, { headers });
             }
 
+            // 2.1 Get Session Status (for Frontend Recovery)
+            if (url.pathname === "/api/session/status" && request.method === "GET") {
+                const sessionId = url.searchParams.get("session_id");
+                if (!sessionId) {
+                    return new Response(JSON.stringify({ error: "No session_id provided" }), {
+                        status: 400,
+                        headers: { ...corsHeaders, "Content-Type": "application/json" }
+                    });
+                }
+
+                const session = await env.DB.prepare(
+                    "SELECT * FROM Sessions WHERE id = ?"
+                ).bind(sessionId).first();
+
+                if (!session) {
+                    return new Response(JSON.stringify({ error: "Session not found" }), {
+                        status: 404,
+                        headers: { ...corsHeaders, "Content-Type": "application/json" }
+                    });
+                }
+
+                const assets = await env.DB.prepare(
+                    "SELECT * FROM Assets WHERE session_id = ?"
+                ).bind(sessionId).all();
+
+                return new Response(JSON.stringify({
+                    session: {
+                        ...session,
+                        hobbies: JSON.parse(session.hobbies_json || "[]")
+                    },
+                    assets: assets.results
+                }), {
+                    headers: { ...corsHeaders, "Content-Type": "application/json" },
+                });
+            }
+
             // 3. AI Generation (Llama + Flux)
             if (url.pathname === "/api/generate" && request.method === "POST") {
                 const { hobbies } = await request.json();
@@ -84,7 +123,8 @@ EVERY prompt MUST produce an image that looks like a professional product photo:
 - EVERYTHING must be SFW and family-friendly.
 - If depicting humans: they MUST be fully clothed in thick, sculptural clothing or depicted as abstract, non-anatomical stone/clay silhouettes.
 - Focus on inanimate objects, animals, or highly stylized, clothed figurines.
-- Avoid any terms that could be interpreted as anatomical or fetishistic.
+- AVOID words that often trigger false positives: "curvy", "fleshy", "skin", "naked", "tight", "sensual", "hot", "bottom", "top", "rear", "front" (when describing bodies).
+- Instead use clinical/design terms: "structural", "volumetric", "geometric", "monolithic", "matte", "opaque".
 - Use object-centric language (e.g., "A gray clay figurine of a hiker in a heavy coat" NOT "A realistic hiker").
 
 Generate 4 concepts:
@@ -201,11 +241,20 @@ Structure:
                     }
                 });
 
-                const concepts = await Promise.all(generationPromises);
+                const generationResults = await Promise.allSettled(generationPromises);
+
+                const finalConcepts = generationResults
+                    .filter(res => res.status === 'fulfilled')
+                    .map(res => res.value);
+
+                if (finalConcepts.length === 0) {
+                    const firstError = generationResults.find(res => res.status === 'rejected')?.reason?.message || "All image generation attempts failed due to safety filters.";
+                    throw new Error(firstError);
+                }
 
                 return new Response(JSON.stringify({
                     session_id: sessionId,
-                    concepts: concepts
+                    concepts: finalConcepts
                 }), {
                     headers: { ...corsHeaders, "Content-Type": "application/json" },
                 });
@@ -227,7 +276,8 @@ Structure:
 
                 // Fixed localtunnel subdomain — restart tunnel with: npx localtunnel --port 8000 --subdomain 3dmemoreez-ai
                 const AI_ENGINE_URL = "https://3dmemoreez-ai.loca.lt/generate-3d";
-                const WEBHOOK_URL = `${url.origin}/api/webhook/runpod`;
+                // Use localtunnel for worker too so local AI can post back to our local wrangler
+                const WEBHOOK_URL = "https://3dmemoreez-worker.loca.lt/api/webhook/runpod";
 
                 // Trigger 3D Engine
                 try {
@@ -401,6 +451,179 @@ Structure:
                 } else {
                     throw new Error(slicerData.detail || "Slicer failed to return success");
                 }
+            }
+
+            // 9. Create Stripe Checkout Session
+            if (url.pathname === "/api/checkout/create-session" && request.method === "POST") {
+                const body = await request.json();
+                const session_id = body.session_id;
+                const asset_id = body.asset_id;
+                const receiver_first_name = body.receiver_first_name || null;
+                const receiver_last_name = body.receiver_last_name || null;
+                const email = body.email || null;
+                const shipping_address = body.shipping_address || null;
+                const stats = body.stats || {};
+
+                if (!session_id) {
+                    return new Response(JSON.stringify({ error: "Missing session_id" }), { status: 400, headers: corsHeaders });
+                }
+
+                if (!env.STRIPE_SECRET_KEY) {
+                    return new Response(JSON.stringify({ error: "Missing Stripe config" }), { status: 500, headers: corsHeaders });
+                }
+
+                const stripe = new Stripe(env.STRIPE_SECRET_KEY);
+
+                const materialGrams = stats?.total_material_grams || 0;
+                const materialCost = stats?.total_material_cost || 0;
+                const baseServiceFee = 12.00;
+                const shippingFee = 9.00;
+                const totalInvestment = materialCost + baseServiceFee + shippingFee;
+                const totalCents = Math.round(totalInvestment * 100);
+
+                const orderId = `ord_${crypto.randomUUID().replace(/-/g, '').substring(0, 16)}`;
+
+                // Get asset paths
+                const asset = await env.DB.prepare(
+                    "SELECT stl_r2_path FROM Assets WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
+                ).bind(session_id, asset_id, `%${asset_id}%`).first();
+
+                // Save Order as pending
+                await env.DB.prepare(`
+                    INSERT INTO Orders (
+                        id, session_id, user_email, receiver_first_name, receiver_last_name,
+                        shipping_address, status, price_cents, material_grams, print_duration_minutes,
+                        final_stl_r2_path, gcode_r2_path
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+                `).bind(
+                    orderId, session_id, email, receiver_first_name, receiver_last_name,
+                    shipping_address, totalCents, materialGrams,
+                    Math.round((stats?.estimated_print_time_seconds || 0) / 60),
+                    asset?.stl_r2_path || null,
+                    `gcode___${session_id}___${asset_id}.gcode` // Assuming this path based on slicer logic
+                ).run();
+
+                // SIMULATION MODE: If key is placeholder, bypass Stripe and go to local success
+                if (env.STRIPE_SECRET_KEY === 'sk_test_123') {
+                    console.log("⚠️ SIMULATION MODE: Stripe key is placeholder. Redirecting to success page.");
+                    // Mark order as paid in DB immediately for simulation
+                    await env.DB.prepare(
+                        "UPDATE Orders SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                    ).bind(orderId).run();
+
+                    // Redirect back to the frontend success page
+                    const referer = request.headers.get("Referer");
+                    const frontendOrigin = referer ? new URL(referer).origin : url.origin;
+
+                    return new Response(JSON.stringify({
+                        url: `${frontendOrigin}/checkout/success?session_id=${session_id}`
+                    }), {
+                        headers: { ...corsHeaders, "Content-Type": "application/json" },
+                    });
+                }
+
+                const checkoutSession = await stripe.checkout.sessions.create({
+                    payment_method_types: ['card'],
+                    customer_email: email,
+                    metadata: { orderId, sessionId: session_id },
+                    line_items: [
+                        {
+                            price_data: {
+                                currency: 'usd',
+                                product_data: {
+                                    name: '3Dmemoreez Custom Figurine',
+                                    description: `Precision printed in PLA (${materialGrams}g). Includes AI modeling and global express shipping.`,
+                                },
+                                unit_amount: totalCents,
+                            },
+                            quantity: 1,
+                        },
+                    ],
+                    mode: 'payment',
+                    success_url: `${url.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+                    cancel_url: `${url.origin}/checkout`,
+                });
+
+                return new Response(JSON.stringify({ url: checkoutSession.url }), {
+                    headers: { ...corsHeaders, "Content-Type": "application/json" },
+                });
+            }
+
+            // 10. Stripe Webhook
+            if (url.pathname === "/api/webhook/stripe" && request.method === "POST") {
+                const signature = request.headers.get("stripe-signature");
+                if (!signature || !env.STRIPE_WEBHOOK_SECRET || !env.STRIPE_SECRET_KEY) {
+                    return new Response("Webhook secret not configured", { status: 400 });
+                }
+
+                const stripe = new Stripe(env.STRIPE_SECRET_KEY);
+                const body = await request.text();
+
+                let event;
+                try {
+                    event = stripe.webhooks.constructEvent(body, signature, env.STRIPE_WEBHOOK_SECRET);
+                } catch (err) {
+                    console.error("Webhook signature verification failed:", err.message);
+                    return new Response(`Webhook Error: ${err.message}`, { status: 400 });
+                }
+
+                if (event.type === 'checkout.session.completed') {
+                    const session = event.data.object;
+                    const orderId = session.metadata.orderId;
+
+                    // Update D1
+                    await env.DB.prepare(
+                        "UPDATE Orders SET status = 'paid', stripe_payment_intent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                    ).bind(session.payment_intent, orderId).run();
+
+                    const order = await env.DB.prepare("SELECT * FROM Orders WHERE id = ?").bind(orderId).first();
+
+                    // Send Emails via Resend
+                    if (env.RESEND_API_KEY && order) {
+                        const resend = new Resend(env.RESEND_API_KEY);
+
+                        // 1. Alert Provider
+                        const providerEmail = env.PROVIDER_EMAIL || 'admin@3dmemoreez.com';
+                        try {
+                            await resend.emails.send({
+                                from: '3Dmemoreez Orders <orders@3dmemoreez.com>',
+                                to: providerEmail,
+                                subject: `New Order Requires Fulfillment: ${orderId}`,
+                                html: `
+                                    <h2>New Order Paid!</h2>
+                                    <p><strong>Order ID:</strong> ${orderId}</p>
+                                    <p><strong>Customer:</strong> ${order.receiver_first_name} ${order.receiver_last_name} (${order.user_email})</p>
+                                    <p><strong>Shipping:</strong> ${order.shipping_address}</p>
+                                    <p><strong>Material:</strong> ${order.material_grams}g PLA</p>
+                                    <p><strong>G-Code:</strong> <a href="${url.origin}/api/assets/${order.gcode_r2_path}">Download G-Code</a></p>
+                                `
+                            });
+                        } catch (e) { console.error("Resend provider alert failed:", e); }
+
+                        // 2. Receipt to Customer
+                        try {
+                            await resend.emails.send({
+                                from: '3Dmemoreez <receipts@3dmemoreez.com>',
+                                to: order.user_email,
+                                subject: `Your 3Dmemoreez Blueprint is confirmed!`,
+                                html: `
+                                    <div style="font-family: sans-serif; max-width: 600px; margin: auto;">
+                                        <h2>Blueprint Sent to Production</h2>
+                                        <p>Hi ${order.receiver_first_name},</p>
+                                        <p>Your custom 3D figurine has been securely scheduled for printing.</p>
+                                        <p><strong>Order ID:</strong> ${orderId}</p>
+                                        <p><strong>Shipping to:</strong> ${order.shipping_address}</p>
+                                        <p>You will receive another email once your item ships!</p>
+                                        <br/>
+                                        <p>The 3Dmemoreez Team</p>
+                                    </div>
+                                `
+                            });
+                        } catch (e) { console.error("Resend customer receipt failed:", e); }
+                    }
+                }
+
+                return new Response(JSON.stringify({ received: true }), { status: 200, headers: corsHeaders });
             }
 
             return new Response("Not Found", { status: 404, headers: corsHeaders });

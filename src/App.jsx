@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Type,
@@ -25,7 +25,7 @@ const STEPS = [
 
 // Always use the deployed worker — wrangler dev --remote can be slow to start
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev'
+    ? 'http://localhost:8787'
     : 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev';
 
 export default function App() {
@@ -35,11 +35,78 @@ export default function App() {
     });
     const [concepts, setConcepts] = useState([]);
     const [selectedConcept, setSelectedConcept] = useState(null);
-    const [sessionId, setSessionId] = useState(null);
+    const [sessionId, setSessionId] = useState(() => localStorage.getItem('3dmemoreez_session_id'));
     const [isGenerating, setIsGenerating] = useState(false);
     const [finalizedData, setFinalizedData] = useState(null);
 
-    const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
+    // Initial load: check for Stripe success redirect OR restore session
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+
+        // 1. Handle Stripe Success
+        if (urlParams.get('session_id') && window.location.pathname === '/checkout/success') {
+            setCurrentStep(4);
+            return;
+        }
+
+        // 2. Restore Session
+        const savedSessionId = localStorage.getItem('3dmemoreez_session_id');
+        if (savedSessionId && currentStep === 0) {
+            const recoverSession = async () => {
+                try {
+                    const resp = await fetch(`${API_BASE_URL}/api/session/status?session_id=${savedSessionId}`);
+                    if (!resp.ok) throw new Error("Session expired or invalid");
+
+                    const { session, assets } = await resp.json();
+
+                    // Re-hydrate state
+                    setFormData({ hobbies: session.hobbies });
+                    setSessionId(savedSessionId);
+
+                    if (assets && assets.length > 0) {
+                        setConcepts(assets.map(a => ({
+                            id: a.id || a.image_url.split('___').pop().split('.')[0],
+                            url: a.image_url.startsWith('http') ? a.image_url : `${API_BASE_URL}${a.image_url}`,
+                            title: a.title || "Recovered Concept",
+                            type: a.type || "Literal",
+                            score: 95
+                        })));
+                    }
+
+                    // Map step string to index
+                    const stepMap = { 'input': 0, 'selection': 1, 'view': 2, 'checkout': 3 };
+                    const targetStep = stepMap[session.current_step] || 0;
+
+                    // If a concept was selected, ensure it's set
+                    if (session.selected_concept_id && assets) {
+                        const selected = assets.find(a => a.id === session.selected_concept_id || a.image_url.includes(session.selected_concept_id));
+                        if (selected) {
+                            setSelectedConcept({
+                                id: session.selected_concept_id,
+                                url: selected.image_url.startsWith('http') ? selected.image_url : `${API_BASE_URL}${selected.image_url}`,
+                                title: selected.title || "Selected Concept"
+                            });
+                        }
+                    }
+
+                    setCurrentStep(targetStep);
+                } catch (err) {
+                    console.warn("Session recovery failed:", err);
+                    localStorage.removeItem('3dmemoreez_session_id');
+                }
+            };
+            recoverSession();
+        }
+    }, []);
+
+    // Save step to localStorage
+    useEffect(() => {
+        if (sessionId) {
+            localStorage.setItem('3dmemoreez_session_id', sessionId);
+        }
+    }, [sessionId, currentStep]);
+
+    const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, STEPS.length));
     const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
 
     const handleFinalize = (data) => {
@@ -66,6 +133,7 @@ export default function App() {
             const result = await response.json();
             setConcepts(result.concepts);
             setSessionId(result.session_id);
+            localStorage.setItem('3dmemoreez_session_id', result.session_id);
             setIsGenerating(false);
             nextStep();
         } catch (error) {
@@ -111,15 +179,20 @@ export default function App() {
                         {STEPS.map((step, idx) => {
                             const isActive = idx === currentStep;
                             const isCompleted = idx < currentStep;
+                            const isClickable = idx < currentStep && currentStep < 4;
 
                             return (
                                 <div key={step.id} className="flex items-center group">
-                                    <div className={`flex items-center gap-2 md:gap-3 px-2 md:px-4 py-2 rounded-2xl transition-all duration-500 ${isActive ? 'bg-white/[0.05]' : ''}`}>
+                                    <button
+                                        onClick={() => isClickable && setCurrentStep(idx)}
+                                        disabled={!isClickable}
+                                        className={`flex items-center gap-2 md:gap-3 px-2 md:px-4 py-2 rounded-2xl transition-all duration-500 ${isActive ? 'bg-white/[0.05]' : ''} ${isClickable ? 'hover:bg-white/10 cursor-pointer' : 'cursor-default'}`}
+                                    >
                                         <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold border-2 transition-all duration-700 ${isActive ? 'border-primary bg-primary shadow-[0_0_20px_rgba(139,92,246,0.5)] text-white scale-110' : isCompleted ? 'border-green-400/50 bg-green-400/20 text-green-400' : 'border-white/10 text-white/20'}`}>
                                             {isCompleted ? '✓' : idx + 1}
                                         </div>
                                         <span className={`hidden sm:inline font-bold text-[11px] md:text-xs uppercase tracking-[0.2em] ${isActive ? 'text-white' : 'text-white/20'}`}>{step.title}</span>
-                                    </div>
+                                    </button>
                                     {idx < STEPS.length - 1 && (
                                         <div className="mx-2 md:mx-4 w-4 md:w-8 h-[2px] bg-white/[0.03] rounded-full overflow-hidden">
                                             <div className={`h-full bg-primary transition-all duration-1000 ${isCompleted ? 'w-full' : 'w-0'}`} />
@@ -128,6 +201,18 @@ export default function App() {
                                 </div>
                             );
                         })}
+
+                        <button
+                            onClick={() => {
+                                if (confirm("Start a new gift from scratch? Current progress will be cleared.")) {
+                                    localStorage.removeItem('3dmemoreez_session_id');
+                                    window.location.href = '/';
+                                }
+                            }}
+                            className="ml-4 p-2 md:px-4 md:py-2 rounded-xl border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white hover:bg-white/5 transition-all"
+                        >
+                            Reset
+                        </button>
                     </nav>
                 </div>
             </header>
@@ -173,6 +258,23 @@ export default function App() {
                                         finalizedData={finalizedData}
                                         onBack={prevStep}
                                     />
+                                )}
+                                {currentStep === 4 && (
+                                    <div className="w-full max-w-2xl mx-auto px-4 animate-fade-in text-center py-20">
+                                        <div className="w-24 h-24 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-8 border border-green-500/20 glow-shadow">
+                                            <Sparkles className="w-12 h-12 text-green-400" />
+                                        </div>
+                                        <h2 className="text-5xl font-black mb-6 tracking-tighter italic text-white">Order <span className="text-green-400">Secured</span></h2>
+                                        <p className="text-white/60 text-lg md:text-xl font-light leading-relaxed mb-12">
+                                            Your 3D blueprint has been transmitted to our slicing engine. We've sent a <strong>confirmation email</strong> to your inbox with your receipt. Production will begin shortly.
+                                        </p>
+                                        <button
+                                            onClick={() => window.location.href = '/'}
+                                            className="px-8 py-4 bg-white/5 border border-white/10 rounded-full font-bold uppercase tracking-widest text-sm hover:bg-white/10 transition-colors"
+                                        >
+                                            Return to Origin
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         </motion.div>

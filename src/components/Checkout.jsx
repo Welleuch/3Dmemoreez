@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { ChevronLeft, CreditCard, Box, Truck, ShieldCheck, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
+
+const WORKER_URL = import.meta.env.VITE_WORKER_URL || "http://localhost:8787";
 
 export default function Checkout({ selectedConcept, finalizedData, onBack }) {
     const stats = finalizedData?.printEstimate || {};
@@ -13,6 +16,48 @@ export default function Checkout({ selectedConcept, finalizedData, onBack }) {
 
     const line1 = finalizedData?.line1;
     const line2 = finalizedData?.line2;
+
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
+    const [email, setEmail] = useState('');
+    const [address, setAddress] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleCheckout = async () => {
+        if (!firstName || !lastName || !email || !address) {
+            alert('Please fill in all shipping details first.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const res = await fetch(`${WORKER_URL}/api/checkout/create-session`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: finalizedData.sessionId, // Note: ensure this exists in finalizedData
+                    asset_id: selectedConcept.id,
+                    receiver_first_name: firstName,
+                    receiver_last_name: lastName,
+                    email: email,
+                    shipping_address: address,
+                    stats: stats
+                })
+            });
+
+            const data = await res.json();
+            if (data.url) {
+                window.location.href = data.url;
+            } else {
+                alert(data.error || 'Failed to initialize checkout');
+                setIsSubmitting(false);
+            }
+        } catch (error) {
+            console.error('Checkout error:', error);
+            alert('An error occurred during checkout setup.');
+            setIsSubmitting(false);
+        }
+    };
 
     return (
         <div className="w-full max-w-6xl mx-auto px-4 animate-fade-in">
@@ -85,19 +130,19 @@ export default function Checkout({ selectedConcept, finalizedData, onBack }) {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-14">
                             <div className="space-y-4">
                                 <label className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em] ml-4">Receiver First Name</label>
-                                <input type="text" placeholder="GIVEN NAME" className="w-full bg-transparent border-b-2 border-white/5 px-4 py-5 text-xl md:text-2xl font-black text-white placeholder-white/5 focus:outline-none focus:border-primary transition-all tracking-tight uppercase" />
+                                <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="GIVEN NAME" className="w-full bg-transparent border-b-2 border-white/5 px-4 py-5 text-xl md:text-2xl font-black text-white placeholder-white/5 focus:outline-none focus:border-primary transition-all tracking-tight uppercase" />
                             </div>
                             <div className="space-y-4">
                                 <label className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em] ml-4">Receiver Last Name</label>
-                                <input type="text" placeholder="FAMILY NAME" className="w-full bg-transparent border-b-2 border-white/5 px-4 py-5 text-xl md:text-2xl font-black text-white placeholder-white/5 focus:outline-none focus:border-primary transition-all tracking-tight uppercase" />
+                                <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="FAMILY NAME" className="w-full bg-transparent border-b-2 border-white/5 px-4 py-5 text-xl md:text-2xl font-black text-white placeholder-white/5 focus:outline-none focus:border-primary transition-all tracking-tight uppercase" />
                             </div>
                             <div className="md:col-span-2 space-y-4">
                                 <label className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em] ml-4">Digital Correlation (Email)</label>
-                                <input type="email" placeholder="EMAIL@DESTINATION.COM" className="w-full bg-transparent border-b-2 border-white/5 px-4 py-5 text-xl md:text-2xl font-black text-white placeholder-white/5 focus:outline-none focus:border-primary transition-all tracking-tight uppercase" />
+                                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="EMAIL@DESTINATION.COM" className="w-full bg-transparent border-b-2 border-white/5 px-4 py-5 text-xl md:text-2xl font-black text-white placeholder-white/5 focus:outline-none focus:border-primary transition-all tracking-tight uppercase" />
                             </div>
                             <div className="md:col-span-2 space-y-4">
                                 <label className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em] ml-4">Physical Destination</label>
-                                <input type="text" placeholder="STREET, BUILDING, SUITE..." className="w-full bg-transparent border-b-2 border-white/5 px-4 py-5 text-xl md:text-2xl font-black text-white placeholder-white/5 focus:outline-none focus:border-primary transition-all tracking-tight uppercase" />
+                                <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="STREET, BUILDING, SUITE..." className="w-full bg-transparent border-b-2 border-white/5 px-4 py-5 text-xl md:text-2xl font-black text-white placeholder-white/5 focus:outline-none focus:border-primary transition-all tracking-tight uppercase" />
                             </div>
                         </div>
                     </div>
@@ -132,8 +177,11 @@ export default function Checkout({ selectedConcept, finalizedData, onBack }) {
                                 </div>
                             </div>
 
-                            <button className="w-full bg-white text-black py-8 md:py-10 rounded-full font-black text-lg md:text-xl uppercase tracking-[0.5em] hover:scale-[1.03] active:scale-[0.97] transition-all shadow-[0_20px_50px_rgba(255,255,255,0.15)] mb-8">
-                                Complete Order
+                            <button
+                                onClick={handleCheckout}
+                                disabled={isSubmitting}
+                                className={`w-full bg-white text-black py-8 md:py-10 rounded-full font-black text-lg md:text-xl uppercase tracking-[0.5em] transition-all shadow-[0_20px_50px_rgba(255,255,255,0.15)] mb-8 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.03] active:scale-[0.97]'}`}>
+                                {isSubmitting ? 'Opening Secure Portal...' : 'Complete Order'}
                             </button>
 
                             <div className="flex items-center justify-center gap-2 text-white/20 text-[10px] font-black uppercase tracking-[0.2em]">
