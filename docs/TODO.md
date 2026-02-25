@@ -238,3 +238,34 @@
 * [x] **Apple Pay & Google Pay:** Configure and verify Stripe wallet elements for instant checkout.
 * [x] **PayPal Integration:** Implement PayPal as an alternative checkout path (via Stripe).
 * [x] **Bank Transfers:** Implement SEPA / ACH support for high-value operations (via Stripe).
+
+---
+
+## Phase 11: UI/UX Global Improvements
+
+* [ ] **UI Polish:** Fix spacing, padding, and text truncation across the app to make it feel more premium.
+* [ ] **App.jsx & AdminDashboard.jsx:** Inspect and adjust layout constraints, ensuring text readability and proper mobile responsiveness.
+
+---
+
+## Phase 12: Dynamic Input Form (`FactsInputForm`)
+
+* [ ] **Dynamic Array:** Convert the fixed 3-item state into a dynamic array.
+* [ ] **Add/Remove Functionality:** Implement a "+ Add dimension" button and a remove/delete button for entries to allow users pure free-form input (e.g., specific facts or hobbies).
+* [ ] **Fluid UI:** Optimize the layout to handle dynamic heights and multiple items gracefully.
+
+---
+
+## Phase 13: 3D Printability Prompt Optimization
+
+* [ ] **Prompt Engineering:** Update the Llama 3 system prompt in `backend/src/index.js`.
+* [ ] **Enforce Constraints:** Explicitly require thick, chunky, monolithic shapes and add strict negative constraints against fragile or thin details.
+* [ ] **Testing:** Verify Flux outputs to ensure the AI creates a sturdy 3D-printable structure rather than a delicate scene.
+
+---
+
+## Phase 14: CSG Pedestal Overlap Adjustments
+
+* [ ] **Vertical Offset:** Adjust the `centerY` overlap calculation in `ThreeSceneViewer.jsx` (currently `0.1`) to something shallower like `0.02` or `0.05`.
+* [ ] **`csgEngine.js` Synchronization:** Ensure the backend CSG engine uses the same adjusted overlay offset so the STL matches the preview.
+* [ ] **Visual Verification:** Check the 3D Studio step to visually confirm the model sits higher on the pedestal.
