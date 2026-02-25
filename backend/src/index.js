@@ -1,6 +1,128 @@
 import { Stripe } from 'stripe';
 import { Resend } from 'resend';
 
+async function sendOrderEmails(env, orderId, apiUrlOrigin) {
+    if (!env.RESEND_API_KEY) {
+        console.log("RESEND_API_KEY not configured. Skipping emails.");
+        return;
+    }
+    try {
+        const order = await env.DB.prepare("SELECT * FROM Orders WHERE id = ?").bind(orderId).first();
+        if (!order) {
+            console.error(`Order ${orderId} not found for emailing.`);
+            return;
+        }
+
+        const asset = await env.DB.prepare(
+            "SELECT image_url FROM Assets WHERE session_id = ? AND status != 'failed' ORDER BY created_at DESC LIMIT 1"
+        ).bind(order.session_id).first();
+
+        // 3D Snapshot placeholder for now
+        const referenceImageUrl = asset && asset.image_url ? `${apiUrlOrigin}${asset.image_url}` : 'https://placehold.co/600x400/eeeeee/999999?text=Reference+Image';
+        const snapshotUrl = referenceImageUrl;
+
+        const cleanStlPath = order.final_stl_r2_path ? order.final_stl_r2_path.replace('/api/assets/', '') : '';
+        const cleanGcodePath = order.gcode_r2_path ? order.gcode_r2_path.replace('/api/assets/', '') : '';
+
+        const stlDownloadUrl = cleanStlPath ? `${apiUrlOrigin}/api/assets/${cleanStlPath}` : '#';
+        const gcodeDownloadUrl = cleanGcodePath ? `${apiUrlOrigin}/api/assets/${cleanGcodePath}` : '#';
+
+        const resend = new Resend(env.RESEND_API_KEY);
+
+        // 1. Admin Provider Alert
+        const providerEmail = env.PROVIDER_EMAIL || 'walid.elleuch@outlook.de';
+        try {
+            const response = await resend.emails.send({
+                from: '3Dmemoreez <onboarding@resend.dev>',
+                to: providerEmail,
+                subject: `🚨 NEW PRINT ORDER: ${order.receiver_first_name} ${order.receiver_last_name} (${orderId})`,
+                html: `
+                    <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f4;">
+                        <h2 style="color: #333;">New Order Requires Fulfillment</h2>
+                        <div style="background: white; padding: 20px; border-radius: 8px;">
+                            <h3 style="border-bottom: 1px solid #eee; padding-bottom: 10px;">Client Info</h3>
+                            <p><strong>Name:</strong> ${order.receiver_first_name} ${order.receiver_last_name}</p>
+                            <p><strong>Email:</strong> ${order.user_email}</p>
+                            <p><strong>Shipping Address:</strong><br/>${order.shipping_address}</p>
+                            
+                            <h3 style="border-bottom: 1px solid #eee; padding-bottom: 10px;">Print Stats</h3>
+                            <p><strong>Material Mass:</strong> ${order.material_grams}g PLA</p>
+                            <p><strong>Estimated Print Time:</strong> ${order.print_duration_minutes} minutes</p>
+                            <p><strong>Investment Collected:</strong> $${(order.price_cents / 100).toFixed(2)}</p>
+
+                            <h3 style="border-bottom: 1px solid #eee; padding-bottom: 10px;">Production Assets</h3>
+                            <div style="margin-bottom: 20px;">
+                                <a href="${stlDownloadUrl}" style="background-color: #007bff; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; margin-right: 10px; display: inline-block;">Download final .STL</a>
+                                <a href="${gcodeDownloadUrl}" style="background-color: #28a745; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; display: inline-block;">Download sliced .GCODE</a>
+                            </div>
+
+                            <h3 style="border-bottom: 1px solid #eee; padding-bottom: 10px;">Visual References</h3>
+                            <div style="display: flex; gap: 20px;">
+                                <div>
+                                    <p><strong>2D Concept:</strong></p>
+                                    <img src="${referenceImageUrl}" width="300" style="border-radius: 8px; border: 1px solid #ccc;" alt="2D Concept" />
+                                </div>
+                                <div>
+                                    <p><strong>3D Snapshot (Placeholder):</strong></p>
+                                    <img src="${snapshotUrl}" width="300" style="border-radius: 8px; border: 1px solid #ccc;" alt="3D Snapshot" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `
+            });
+            if (response.error) {
+                console.error("[ERROR] Resend Admin Alert failed (API Error):", response.error);
+            } else {
+                console.log("[SUCCESS] Admin alert email sent. ID:", response.data?.id);
+            }
+        } catch (e) { console.error("[ERROR] Resend Admin Alert Exception:", e); }
+
+        // 2. Client Order Receipt
+        try {
+            const response = await resend.emails.send({
+                from: '3Dmemoreez <onboarding@resend.dev>',
+                to: order.user_email,
+                subject: `Your Custom 3D Artifact is in Production! (${orderId})`,
+                html: `
+                    <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #07090d; color: #ffffff; padding: 40px 20px; border-radius: 16px;">
+                        <div style="text-align: center; margin-bottom: 40px;">
+                            <span style="font-size: 10px; font-weight: 900; letter-spacing: 0.5em; color: rgba(255,255,255,0.4); text-transform: uppercase;">Order Confirmed</span>
+                            <h1 style="font-size: 28px; font-weight: 900; margin: 10px 0 0 0; font-style: italic;">The Artifact Enters <span style="color: #8b5cf6;">Production</span></h1>
+                        </div>
+                        
+                        <p style="font-size: 16px; line-height: 1.6; color: rgba(255,255,255,0.8);">Hi ${order.receiver_first_name},</p>
+                        <p style="font-size: 16px; line-height: 1.6; color: rgba(255,255,255,0.8);">Thank you for trusting 3Dmemoreez. Your custom 3D artifact has successfully entered our production queue. Our precision FDM machines are ready to crystallize your digital blueprint into reality.</p>
+                        
+                        <div style="background-color: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; margin: 30px 0;">
+                            <h3 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.2em; color: rgba(255,255,255,0.4); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-top: 0;">Order Summary</h3>
+                            <p style="margin: 10px 0;"><strong style="color: #fff;">Order ID:</strong> <span style="color: rgba(255,255,255,0.7);">${orderId}</span></p>
+                            <p style="margin: 10px 0;"><strong style="color: #fff;">Total Investment:</strong> <span style="color: rgba(255,255,255,0.7);">$${(order.price_cents / 100).toFixed(2)}</span></p>
+                            <p style="margin: 10px 0;"><strong style="color: #fff;">Shipping To:</strong> <span style="color: rgba(255,255,255,0.7);">${order.shipping_address}</span></p>
+                        </div>
+
+                        <div style="margin: 30px 0; text-align: center;">
+                            <p style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.2em; color: rgba(255,255,255,0.4);">Your Concept</p>
+                            <img src="${referenceImageUrl}" style="width: 100%; max-width: 400px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); margin-top: 10px;" alt="2D Concept" />
+                        </div>
+
+                        <p style="font-size: 14px; line-height: 1.6; color: rgba(255,255,255,0.6); text-align: center; margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
+                            You will receive another transmission with a tracking number as soon as your physical manifest leaves our facility. Securely yours,<br/><strong>The 3Dmemoreez Team</strong>
+                        </p>
+                    </div>
+                `
+            });
+            if (response.error) {
+                console.error("[ERROR] Resend Client Receipt failed (API Error):", response.error);
+            } else {
+                console.log("[SUCCESS] Client receipt email sent. ID:", response.data?.id);
+            }
+        } catch (e) { console.error("[ERROR] Resend Client Receipt Exception:", e); }
+    } catch (e) {
+        console.error("sendOrderEmails execution error:", e);
+    }
+}
+
 export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
@@ -17,6 +139,26 @@ export default {
         }
 
         try {
+            // 0. Test Email Endpoint
+            if (url.pathname === "/api/test-email" && request.method === "GET") {
+                if (!env.RESEND_API_KEY) {
+                    return new Response("No RESEND_API_KEY found in .dev.vars", { status: 500, headers: corsHeaders });
+                }
+                const resend = new Resend(env.RESEND_API_KEY);
+                const providerEmail = url.searchParams.get("email") || env.PROVIDER_EMAIL || 'walid.elleuch@outlook.de';
+
+                const response = await resend.emails.send({
+                    from: '3Dmemoreez <onboarding@resend.dev>',
+                    to: providerEmail,
+                    subject: '🚨 Test Email from 3Dmemoreez',
+                    html: '<p>This is a test email to verify the Resend connection.</p>'
+                });
+
+                return new Response(JSON.stringify(response), {
+                    headers: { ...corsHeaders, "Content-Type": "application/json" }
+                });
+            }
+
             // 1. Health Check
             if (url.pathname === "/api/health") {
                 return new Response(JSON.stringify({ status: "ok" }), {
@@ -274,10 +416,9 @@ Structure:
                     "UPDATE Assets SET status = 'processing' WHERE session_id = ? AND image_url LIKE ?"
                 ).bind(session_id, `%${concept_id}%`).run();
 
-                // Fixed localtunnel subdomain — restart tunnel with: npx localtunnel --port 8000 --subdomain 3dmemoreez-ai
-                const AI_ENGINE_URL = "https://3dmemoreez-ai.loca.lt/generate-3d";
-                // Use localtunnel for worker too so local AI can post back to our local wrangler
-                const WEBHOOK_URL = "https://3dmemoreez-worker.loca.lt/api/webhook/runpod";
+                const AI_ENGINE_URL = env.AI_ENGINE_URL || "https://3dmemoreez-ai.loca.lt/generate-3d";
+                // Let the python script reply back dynamically to wherever the worker is hosted (e.g. 127.0.0.1:8787)
+                const WEBHOOK_URL = `${url.origin}/api/webhook/runpod`;
 
                 // Trigger 3D Engine
                 try {
@@ -462,6 +603,7 @@ Structure:
                 const receiver_last_name = body.receiver_last_name || null;
                 const email = body.email || null;
                 const shipping_address = body.shipping_address || null;
+                const payment_method = body.payment_method || 'stripe';
                 const stats = body.stats || {};
 
                 if (!session_id) {
@@ -503,27 +645,10 @@ Structure:
                     `gcode___${session_id}___${asset_id}.gcode` // Assuming this path based on slicer logic
                 ).run();
 
-                // SIMULATION MODE: If key is placeholder, bypass Stripe and go to local success
-                if (env.STRIPE_SECRET_KEY === 'sk_test_123') {
-                    console.log("⚠️ SIMULATION MODE: Stripe key is placeholder. Redirecting to success page.");
-                    // Mark order as paid in DB immediately for simulation
-                    await env.DB.prepare(
-                        "UPDATE Orders SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-                    ).bind(orderId).run();
+                const requestOrigin = request.headers.get("origin") || url.origin;
 
-                    // Redirect back to the frontend success page
-                    const referer = request.headers.get("Referer");
-                    const frontendOrigin = referer ? new URL(referer).origin : url.origin;
-
-                    return new Response(JSON.stringify({
-                        url: `${frontendOrigin}/checkout/success?session_id=${session_id}`
-                    }), {
-                        headers: { ...corsHeaders, "Content-Type": "application/json" },
-                    });
-                }
-
-                const checkoutSession = await stripe.checkout.sessions.create({
-                    payment_method_types: ['card'],
+                // Configure Stripe Session based on selection
+                const sessionOptions = {
                     customer_email: email,
                     metadata: { orderId, sessionId: session_id },
                     line_items: [
@@ -540,9 +665,21 @@ Structure:
                         },
                     ],
                     mode: 'payment',
-                    success_url: `${url.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-                    cancel_url: `${url.origin}/checkout`,
-                });
+                    success_url: `${requestOrigin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+                    cancel_url: `${requestOrigin}/checkout`,
+                };
+
+                if (payment_method === 'paypal') {
+                    sessionOptions.payment_method_types = ['paypal'];
+                } else if (payment_method === 'bank_transfer') {
+                    // For SEPA/ACH, we use specialized types. SEPA is sepa_debit, ACH is us_bank_account.
+                    // Defaulting to automatic for better coverage if bank is picked.
+                    sessionOptions.automatic_payment_methods = { enabled: true };
+                } else {
+                    sessionOptions.automatic_payment_methods = { enabled: true };
+                }
+
+                const checkoutSession = await stripe.checkout.sessions.create(sessionOptions);
 
                 return new Response(JSON.stringify({ url: checkoutSession.url }), {
                     headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -576,51 +713,7 @@ Structure:
                         "UPDATE Orders SET status = 'paid', stripe_payment_intent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
                     ).bind(session.payment_intent, orderId).run();
 
-                    const order = await env.DB.prepare("SELECT * FROM Orders WHERE id = ?").bind(orderId).first();
-
-                    // Send Emails via Resend
-                    if (env.RESEND_API_KEY && order) {
-                        const resend = new Resend(env.RESEND_API_KEY);
-
-                        // 1. Alert Provider
-                        const providerEmail = env.PROVIDER_EMAIL || 'admin@3dmemoreez.com';
-                        try {
-                            await resend.emails.send({
-                                from: '3Dmemoreez Orders <orders@3dmemoreez.com>',
-                                to: providerEmail,
-                                subject: `New Order Requires Fulfillment: ${orderId}`,
-                                html: `
-                                    <h2>New Order Paid!</h2>
-                                    <p><strong>Order ID:</strong> ${orderId}</p>
-                                    <p><strong>Customer:</strong> ${order.receiver_first_name} ${order.receiver_last_name} (${order.user_email})</p>
-                                    <p><strong>Shipping:</strong> ${order.shipping_address}</p>
-                                    <p><strong>Material:</strong> ${order.material_grams}g PLA</p>
-                                    <p><strong>G-Code:</strong> <a href="${url.origin}/api/assets/${order.gcode_r2_path}">Download G-Code</a></p>
-                                `
-                            });
-                        } catch (e) { console.error("Resend provider alert failed:", e); }
-
-                        // 2. Receipt to Customer
-                        try {
-                            await resend.emails.send({
-                                from: '3Dmemoreez <receipts@3dmemoreez.com>',
-                                to: order.user_email,
-                                subject: `Your 3Dmemoreez Blueprint is confirmed!`,
-                                html: `
-                                    <div style="font-family: sans-serif; max-width: 600px; margin: auto;">
-                                        <h2>Blueprint Sent to Production</h2>
-                                        <p>Hi ${order.receiver_first_name},</p>
-                                        <p>Your custom 3D figurine has been securely scheduled for printing.</p>
-                                        <p><strong>Order ID:</strong> ${orderId}</p>
-                                        <p><strong>Shipping to:</strong> ${order.shipping_address}</p>
-                                        <p>You will receive another email once your item ships!</p>
-                                        <br/>
-                                        <p>The 3Dmemoreez Team</p>
-                                    </div>
-                                `
-                            });
-                        } catch (e) { console.error("Resend customer receipt failed:", e); }
-                    }
+                    ctx.waitUntil(sendOrderEmails(env, orderId, url.origin));
                 }
 
                 return new Response(JSON.stringify({ received: true }), { status: 200, headers: corsHeaders });

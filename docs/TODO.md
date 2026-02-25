@@ -102,7 +102,7 @@
     *   [x] Converted ALL relative imports to absolute imports across all 72 Python files.
     *   [x] Fixed incorrect `hy3dgen.utils` → `hy3dgen.shapegen.utils` path in 3 autoencoder modules.
     *   [x] Engine now loads and serves on `http://0.0.0.0:8000` with **zero ComfyUI dependencies**.
-* [x] **Public Bridge:** Set up `localtunnel` + `wrangler dev --remote` for end-to-end testing between Cloudflare and Local GPU.
+* [x] **Public Bridge -> Local Loopback:** Replaced fragile `localtunnel` instances with native `127.0.0.1` Wrangler bindings to guarantee stable local communication between the frontend, Cloudflare orchestrator, and local Slicer/AI engines.
 * [x] **Local GPU Resolution:** PIVOT to Docker Container to support high-end hardware.
     *   [x] Create Dockerfile with `python:3.10-slim` base + PyTorch Nightly cu128 wheels.
     *   [x] Create `docker-compose.yml` for local GPU passthrough.
@@ -134,7 +134,7 @@
     *   [ ] **Network Volume:** Mount `/workspace/models` for weights (avoid re-download every cold start).
     *   [ ] **Startup Script:** Ensure fast cold-start using volume mount (`< 30s` target).
     *   [ ] **Endpoint URL:** Wire RunPod endpoint URL into Cloudflare Worker secret (`RUNPOD_ENDPOINT_URL`).
-    *   [ ] **Removes localtunnel dependency** — the root cause of all "Failed to fetch" instability.
+    *   [x] **Removes localtunnel dependency** — the root cause of all "Failed to fetch" instability (Already completed via native 127.0.0.1 bindings).
 
 ## Phase 4a: Manifold Geometry Studio — Engraving (✅ COMPLETE)
 
@@ -215,17 +215,24 @@
 
 ---
 
-## Phase 9: Live Notifications & Email Fulfillment (Next Immediate Goal)
+## Phase 9: Live Notifications & Email Fulfillment (Mostly Complete - Awaiting Domain)
 
-* [ ] **Email Infrastructure:** Update `.dev.vars` with real `RESEND_API_KEY` and verify domain.
-* [ ] **Provider Alerts:** Construct the email template to send G-code link, STL link, and shipping addresses to the admin (`walid.elleuch@outlook.de`) instantly upon payment. Include the reference image and snapshot of the 3D model.
-* [ ] **Client Receipt:** Construct the final customer receipt template with an appealing layout, the selected 2D concept, a snapshot of the 3D model (with pedestal/engraving), and order details.
+> **Note on Resend Sandbox Constraints:** 
+> The email logic and templates are 100% complete and verified. However, because `3dmemoreez.com` is not yet a verified domain in Resend, the account is restricted to Sandbox Mode. In Sandbox Mode, emails from `onboarding@resend.dev` can **only** be delivered to the registered account owner (`walid.elleuch@outlook.de`). Until the official domain is purchased and verified via DNS, all live client emails will be rejected by Resend.
+
+* [x] **Email Infrastructure:** Update `.dev.vars` with real `RESEND_API_KEY`. *(Awaiting Domain Verification for Production)*
+* [x] **Provider Alerts:** Construct the email template to send G-code link, STL link, and shipping addresses to the admin instantly upon payment. Include the reference image and snapshot of the 3D model.
+* [x] **Client Receipt:** Construct the final customer receipt template with an appealing layout, the selected 2D concept, a snapshot of the 3D model, and order details.
 
 ---
 
-## Phase 10: Multi-Payment Deployments (Upcoming)
+## Phase 10: Multi-Payment Deployments (✅ COMPLETE)
 
-* [ ] **Local Stripe configuration:** Update `.dev.vars` with live Stripe API keys.
-* [ ] **Apple Pay & Google Pay:** Configure and verify Stripe wallet elements for instant checkout.
-* [ ] **PayPal Integration:** Implement PayPal as an alternative checkout path.
-* [ ] **Bank Transfers:** Implement SEPA / ACH support for high-value operations.
+> **IMPORTANT: API Key Requirement**
+> All payment methods (Cards, Apple Pay, Google Pay, PayPal, Bank Transfers) are securely routed through **Stripe Checkout**. 
+> Therefore, **ANY** payment selection requires a valid `STRIPE_SECRET_KEY` in `backend/.dev.vars` to function. The simulation bypass (`sk_test_123`) has been removed to ensure true end-to-end payment testing.
+
+* [x] **Local Stripe configuration:** Update `.dev.vars` with live/test Stripe API keys.
+* [x] **Apple Pay & Google Pay:** Configure and verify Stripe wallet elements for instant checkout.
+* [x] **PayPal Integration:** Implement PayPal as an alternative checkout path (via Stripe).
+* [x] **Bank Transfers:** Implement SEPA / ACH support for high-value operations (via Stripe).

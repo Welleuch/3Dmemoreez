@@ -21,7 +21,14 @@ export default function Checkout({ selectedConcept, finalizedData, onBack }) {
     const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
     const [address, setAddress] = useState('');
+    const [selectedMethod, setSelectedMethod] = useState('stripe');
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const paymentMethods = [
+        { id: 'stripe', name: 'Stripe / Card', icon: <CreditCard className="w-5 h-5" />, subtitle: 'Credit, Google & Apple Pay' },
+        { id: 'paypal', name: 'PayPal', icon: <Sparkles className="w-5 h-5 text-blue-400" />, subtitle: 'Instant Transfer' },
+        { id: 'bank_transfer', name: 'Bank Transfer', icon: <Box className="w-5 h-5" />, subtitle: 'SEPA / ACH (2-3 days)' },
+    ];
 
     const handleCheckout = async () => {
         if (!firstName || !lastName || !email || !address) {
@@ -41,6 +48,7 @@ export default function Checkout({ selectedConcept, finalizedData, onBack }) {
                     receiver_last_name: lastName,
                     email: email,
                     shipping_address: address,
+                    payment_method: selectedMethod,
                     stats: stats
                 })
             });
@@ -143,6 +151,39 @@ export default function Checkout({ selectedConcept, finalizedData, onBack }) {
                             <div className="md:col-span-2 space-y-4">
                                 <label className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em] ml-4">Physical Destination</label>
                                 <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="STREET, BUILDING, SUITE..." className="w-full bg-transparent border-b-2 border-white/5 px-4 py-5 text-xl md:text-2xl font-black text-white placeholder-white/5 focus:outline-none focus:border-primary transition-all tracking-tight uppercase" />
+                            </div>
+                        </div>
+
+                        {/* Payment Method Selector */}
+                        <div className="space-y-8 pt-10 border-t border-white/5">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-secondary/10 flex items-center justify-center text-secondary border border-secondary/20">
+                                    <CreditCard className="w-6 h-6" />
+                                </div>
+                                <h3 className="text-2xl md:text-3xl font-black tracking-tighter uppercase italic">Payment Method</h3>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {paymentMethods.map((method) => (
+                                    <button
+                                        key={method.id}
+                                        onClick={() => setSelectedMethod(method.id)}
+                                        className={`p-6 md:p-8 rounded-[2rem] border transition-all text-left relative overflow-hidden group ${selectedMethod === method.id
+                                                ? 'bg-white/10 border-white/20 ring-2 ring-primary'
+                                                : 'bg-white/5 border-white/5 hover:border-white/10'
+                                            }`}
+                                    >
+                                        <div className="flex flex-col h-full justify-between gap-4">
+                                            <div className="p-3 bg-white/5 rounded-xl border border-white/10 w-fit">
+                                                {method.icon}
+                                            </div>
+                                            <div>
+                                                <p className="font-black tracking-tighter text-lg uppercase leading-none mb-1">{method.name}</p>
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-white/20">{method.subtitle}</p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                ))}
                             </div>
                         </div>
                     </div>

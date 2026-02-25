@@ -1,7 +1,7 @@
 # 3Dmemoreez — Product Specification
 
-> Last updated: 2026-02-23
-> Status: **Phase 4 Complete ✅ | Testing Infrastructure Complete ✅ | Phase 4d (Payment + Email) — NEXT**
+> Last updated: 2026-02-25
+> Status: **Phase 4d (Payment + Email) Complete ✅ | Phase 5 (RunPod GPU Deployment) — NEXT**
 
 ---
 
@@ -28,11 +28,11 @@ The platform prioritizes:
 | **Slicing Engine** | PrusaSlicer CLI in local Docker container | ✅ Working |
 | **Storage** | Cloudflare R2 (images, STL, G-code) | ✅ Active |
 | **Database** | Cloudflare D1 (sessions, assets, orders) | ✅ Active |
-| **Dev Bridge** | Localtunnel → localhost:8000 (AI engine) | ✅ Active |
+| **Dev Bridge** | Native 127.0.0.1 loopback (Worker ↔ Python/Docker) | ✅ Complete |
 | **Testing** | Vitest + Playwright + pytest | ✅ Complete |
 | **CI/CD** | GitHub Actions | ✅ Active |
-| **Payment** | Stripe | 🔴 To integrate |
-| **Email** | Resend (transactional) | 🔴 To integrate |
+| **Payment** | Stripe Hosted Checkout (Cards, PayPal, Express) | ✅ Complete |
+| **Email** | Resend (transactional) | ✅ Complete |
 
 ---
 
@@ -48,7 +48,7 @@ The platform prioritizes:
 ### Stage 2 — Concept Gallery (`ConceptCardGrid`)
 - 4 concept cards displayed (2 Literal, 2 Artistic)
 - User clicks "Initiate Blueprint" on chosen concept
-- `POST /api/session/select` → triggers async Hunyuan3D generation via localtunnel
+- `POST /api/session/select` → triggers async Hunyuan3D generation via `127.0.0.1:8000` (Local native bridge)
 
 ### Stage 3 — 3D Studio (`ThreeSceneViewer`)
 - Frontend polls `/api/session/status` every 3 seconds
@@ -60,7 +60,8 @@ The platform prioritizes:
 - **"Finalize Print" button** triggers:
   1. In-browser: `Manifold.union(AI_Mesh, Engraved_Pedestal)` → merged watertight STL
   2. Upload final STL to Slicer Engine → get G-code + print stats
-  3. Navigate to Checkout
+  3. Cache pricing + slicer math to `localStorage` (prevents re-slicing on Stripe cancel)
+  4. Navigate to Checkout
 
 ### Stage 4 — Checkout (`Checkout`)
 - Displays final 3D render thumbnail
@@ -72,7 +73,9 @@ The platform prioritizes:
     - Service fee (flat €12)
     - Shipping (flat €8 EU, €18 international)
 - User enters email + shipping address
-- Stripe payment form
+- Chooses Payment Method (Card, Apple Pay, Google Pay, PayPal, Bank Transfer)
+- All payment methods route securely via **Stripe Hosted Checkout**
+- Supports seamless cancellation/back-navigation: Returning to `/checkout` intercepts the URL and restores cached session data instead of falling back to the 3D scene.
 - On payment confirmation:
   - D1 `Orders` table updated: `status = 'paid'`
   - G-code + final STL stored in R2
@@ -266,7 +269,7 @@ Formula: `price = (material_grams × 0.03) + 12.00 + shipping`
 | **4a** | **three-bvh-csg engraving (Text3D → difference → union)** | ✅ Complete |
 | **4b** | **PrusaSlicer Docker image (local test)** | ✅ Complete |
 | **4c** | **Checkout UI + pricing display from slicer output** | ✅ Complete |
-| **4d** | **Stripe payment + Resend confirmation emails** | 🔴 Next |
+| **4d** | **Stripe payment + Resend confirmation emails** | ✅ Complete |
 | **Testing** | **Comprehensive test infrastructure (unit, integration, E2E)** | ✅ Complete |
 | 5 | RunPod deployment for GPU mesh generation | ⏳ Later |
 | 6 | Cloudflare Containers for slicer (production) | ⏳ Later |

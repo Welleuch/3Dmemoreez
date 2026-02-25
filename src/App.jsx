@@ -25,7 +25,7 @@ const STEPS = [
 
 // Always use the deployed worker — wrangler dev --remote can be slow to start
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:8787'
+    ? 'http://127.0.0.1:8787'
     : 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev';
 
 export default function App() {
@@ -75,7 +75,16 @@ export default function App() {
 
                     // Map step string to index
                     const stepMap = { 'input': 0, 'selection': 1, 'view': 2, 'checkout': 3 };
-                    const targetStep = stepMap[session.current_step] || 0;
+                    let targetStep = stepMap[session.current_step] || 0;
+
+                    // Support Stripe cancellation routing & checkout restoration
+                    if (window.location.pathname === '/checkout') {
+                        const savedData = localStorage.getItem('3dmemoreez_checkout_data');
+                        if (savedData) {
+                            setFinalizedData(JSON.parse(savedData));
+                            targetStep = 3;
+                        }
+                    }
 
                     // If a concept was selected, ensure it's set
                     if (session.selected_concept_id && assets) {
@@ -107,10 +116,17 @@ export default function App() {
     }, [sessionId, currentStep]);
 
     const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, STEPS.length));
-    const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
+    const prevStep = () => {
+        if (window.location.pathname === '/checkout') {
+            window.history.pushState({}, '', '/');
+        }
+        setCurrentStep((prev) => Math.max(prev - 1, 0));
+    };
 
     const handleFinalize = (data) => {
         setFinalizedData(data);
+        localStorage.setItem('3dmemoreez_checkout_data', JSON.stringify(data));
+        window.history.pushState({}, '', '/checkout');
         nextStep();
     };
 
