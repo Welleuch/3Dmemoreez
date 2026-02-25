@@ -15,6 +15,7 @@ import FactsInputForm from './components/FactsInputForm';
 import ConceptCardGrid from './components/ConceptCardGrid';
 import ThreeSceneViewer from './components/ThreeSceneViewer';
 import Checkout from './components/Checkout';
+import AdminDashboard from './components/AdminDashboard';
 
 const STEPS = [
     { id: 'input', title: 'Sentiment', icon: Type },
@@ -178,6 +179,10 @@ export default function App() {
 
         nextStep();
     };
+
+    if (window.location.pathname.startsWith('/admin')) {
+        return <AdminDashboard />;
+    }
 
     return (
         <div className="min-h-screen flex flex-col font-sans selection:bg-primary/30 selection:text-white">

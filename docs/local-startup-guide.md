@@ -52,6 +52,12 @@ npm run dev
 ```
 Navigate to `http://localhost:5173` in your browser.
 
+### 5. Admin Dashboard
+To manage orders and trigger fulfillment:
+1. Navigate to `http://localhost:5173/admin`
+2. Enter the Admin Token (found in `backend/.dev.vars`)
+3. From here you can download STL/G-code files and mark orders as shipped.
+
 ---
 
 ## 💳 Testing Stripe Payments?

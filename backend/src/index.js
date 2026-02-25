@@ -123,6 +123,41 @@ async function sendOrderEmails(env, orderId, apiUrlOrigin) {
     }
 }
 
+async function sendShippingEmail(env, orderId, trackingNumber, apiUrlOrigin) {
+    if (!env.RESEND_API_KEY) {
+        console.log("RESEND_API_KEY not configured. Skipping shipping email.");
+        return;
+    }
+    try {
+        const order = await env.DB.prepare("SELECT * FROM Orders WHERE id = ?").bind(orderId).first();
+        if (!order) return;
+
+        const resend = new Resend(env.RESEND_API_KEY);
+
+        await resend.emails.send({
+            from: '3Dmemoreez <onboarding@resend.dev>',
+            to: order.user_email,
+            subject: `Action Required: Your 3D Artifact has Shipped! (${orderId})`,
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #07090d; color: #ffffff; padding: 40px 20px; border-radius: 16px;">
+                    <h1 style="color: #8b5cf6; font-style: italic;">Transmitted to Logistics</h1>
+                    <p>Hi ${order.receiver_first_name},</p>
+                    <p>Your physical manifest has left our production facility and is now in transit.</p>
+                    <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; margin: 20px 0; border: 1px solid rgba(255,255,255,0.1);">
+                        <p><strong>Tracking Number:</strong> <span style="color: #8b5cf6; font-family: monospace;">${trackingNumber}</span></p>
+                    </div>
+                    <p style="font-size: 14px; color: rgba(255,255,255,0.6);">
+                        Thank you for being part of the 3Dmemoreez journey.
+                    </p>
+                </div>
+            `
+        });
+        console.log(`[SUCCESS] Shipping email sent for order ${orderId}`);
+    } catch (e) {
+        console.error("sendShippingEmail error:", e);
+    }
+}
+
 export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
@@ -131,7 +166,7 @@ export default {
         const corsHeaders = {
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
         };
 
         if (request.method === "OPTIONS") {
@@ -717,6 +752,47 @@ Structure:
                 }
 
                 return new Response(JSON.stringify({ received: true }), { status: 200, headers: corsHeaders });
+            }
+
+            // 11. Admin: Get all orders
+            if (url.pathname === "/api/admin/orders" && request.method === "GET") {
+                const auth = request.headers.get("Authorization");
+                if (auth !== env.ADMIN_TOKEN) {
+                    return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+                }
+
+                const orders = await env.DB.prepare(`
+                    SELECT o.*, a.image_url 
+                    FROM Orders o
+                    LEFT JOIN Assets a ON o.session_id = a.session_id AND a.status != 'failed'
+                    GROUP BY o.id
+                    ORDER BY o.created_at DESC
+                `).all();
+
+                return new Response(JSON.stringify(orders.results), {
+                    headers: { ...corsHeaders, "Content-Type": "application/json" }
+                });
+            }
+
+            // 12. Admin: Mark as Shipped
+            if (url.pathname.startsWith("/api/admin/orders/") && url.pathname.endsWith("/ship") && request.method === "POST") {
+                const auth = request.headers.get("Authorization");
+                if (auth !== env.ADMIN_TOKEN) {
+                    return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+                }
+
+                const orderId = url.pathname.split("/")[4];
+                const { tracking_number } = await request.json();
+
+                await env.DB.prepare(
+                    "UPDATE Orders SET status = 'shipped', tracking_number = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                ).bind(tracking_number, orderId).run();
+
+                ctx.waitUntil(sendShippingEmail(env, orderId, tracking_number, url.origin));
+
+                return new Response(JSON.stringify({ success: true }), {
+                    headers: { ...corsHeaders, "Content-Type": "application/json" }
+                });
             }
 
             return new Response("Not Found", { status: 404, headers: corsHeaders });

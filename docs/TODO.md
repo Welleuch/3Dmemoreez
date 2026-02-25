@@ -170,10 +170,12 @@
 
 ## Phase 7: Admin Dashboard + Fulfillment
 
-* [ ] **Admin route** `/admin` — token-gated (static secret in CF Worker)
-* [ ] **Order list:** Paid orders with status, email, price, created_at
-* [ ] **Per-order actions:** Download G-code, download final STL, view reference image
-* [ ] **Mark shipped:** Updates D1 `status = 'shipped'` → triggers Resend shipping notification email with tracking number
+* [x] **Admin route** `/admin` — token-gated (static secret in CF Worker)
+* [x] **Order list:** Paid orders with status, email, price, created_at
+* [x] **Per-order actions:** Download G-code, download final STL, view reference image
+* [x] **Mark shipped:** Updates D1 `status = 'shipped'` → triggers Resend shipping notification email with tracking number
+* [x] **Admin Authentication:** Implement static token check in Worker and simple login in Frontend.
+* [x] **Shipping Notification:** Implement `sendShippingEmail` logic in Worker.
 
 ---
 
