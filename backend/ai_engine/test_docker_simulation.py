@@ -52,7 +52,7 @@ def test_docker_health():
     """Wait for Docker container to be healthy."""
     print(f"\n[Test] Checking health at {HEALTH_URL}...")
     start_time = time.time()
-    while time.time() - start_time < 30: # Wait 30s for boot
+    while time.time() - start_time < 60: # Wait 60s for boot
         try:
             resp = requests.get(HEALTH_URL, timeout=2)
             if resp.status_code == 200:

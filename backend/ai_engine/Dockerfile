@@ -40,15 +40,24 @@ RUN pip install --no-cache-dir --pre torch torchvision torchaudio --index-url ht
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 4. Copy Application Code
+# 4. Pre-download Models (rembg isnet-general-use)
+# We set U2NET_HOME so the downloaded weights go to a known, baked-in directory
+ENV U2NET_HOME=/app/.u2net
+COPY pre_download.py /app/pre_download.py
+RUN python pre_download.py
+
+# 5. Copy Application Code
 COPY hy3dgen /app/hy3dgen
 COPY main.py /app/main.py
 COPY runpod_handler.py /app/runpod_handler.py
 COPY configs /app/configs
 
-# 5. Environment Config
+# 6. Environment Config
 ENV PYTHONPATH=/app
 ENV IS_DOCKER=true
+# Point MODEL_PATH to the typical RunPod network volume mount path,
+# or user can override at runtime.
+ENV MODEL_PATH=/runpod-volume/hunyuan3d-dit-v2_fp16.safetensors
 
 # Expose port
 EXPOSE 8000

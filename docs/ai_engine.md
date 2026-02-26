@@ -107,10 +107,18 @@ vae.eval()
 
 ---
 
-### Dockerfile key decisions
-- **Base:** `python:3.10-slim` (not a heavy CUDA base image) — PyTorch CUDA wheels are installed directly, resulting in a much smaller image.
-- **PyTorch:** Nightly wheels from `https://download.pytorch.org/whl/nightly/cu128` for `sm_120` (Blackwell) support.
-- **System deps:** `libxext6 libsm6 libxrender1` required for `pymeshlab` in a headless environment.
+### RunPod "Hybrid" Storage Strategy (Fat vs. Lean)
+To achieve sub-30s container scaling on RunPod, we split our footprint:
+1. **Baked into Image (The "Fat" Runtime - ~4GB):** 
+   - Python + Linux deps + PyTorch Nightly `cu128`.
+   - `pre_download.py` bakes the `rembg` `isnet-general-use.onnx` model (~180MB) directly into `/app/.u2net`. This guarantees cold starts are not penalized by HuggingFace download latency.
+2. **External on Network Volume (The "Lean" Data - ~7GB):**
+   - The massive `hunyuan3d-dit-v2_fp16.safetensors` model is NOT baked into the image. If it were, the image would be 11GB+, drastically slowing down RunPod P2P network pulls and local deployments.
+   - It is mounted at runtime via `MODEL_PATH=/runpod-volume/hunyuan3d-dit-v2_fp16.safetensors`.
+
+**Benchmark impact of baking the ~180MB rembg model (RTX 5060):**
+- **Cold load (API online):** 54s → 46s
+- **First-inference time:** 153s → 117s (Saved ~35s by eliminating runtime downloads and GPU/CPU resource contention).
 
 ### Volume mounts (`docker-compose.yml`)
 ```yaml

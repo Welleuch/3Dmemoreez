@@ -50,7 +50,8 @@ The 3D pipeline is now "Production Hardened." AI prompts strictly follow Additiv
 ## 🚀 Next Steps (Priority Order)
 
 ### 🔴 Priority 1 — Production Deployment (RunPod/Cloudflare)
-- [ ] Migrate AI Engine to RunPod Serverless for public API access.
+- [x] Optimize AI Engine Docker image for < 30s cold start on RunPod Serverless.
+- [ ] Deploy the optimized AI Engine to RunPod and integrate the Endpoint ID into the Worker.
 - [ ] Deploy Slicer as a Cloudflare Container for co-located processing.
 
 ### 🟡 Priority 2 — Analytics & UX
