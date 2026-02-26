@@ -253,9 +253,17 @@
 
 ## Phase 13: 3D Printability Prompt Optimization
 
-* [ ] **Single Object Enforcement:** Update Llama 3 system prompt to strictly forbid scenes, backgrounds, or multiple objects.
-* [ ] **Monochrome Logic:** Force prompts to specify "Solid Matte Gray PLA" and "Studio High-Key Lighting" to avoid color artifacts.
-* [ ] **Structural Primitives:** Add instructions to prioritize "chunky, monolithic" volumes that are easier for Hunyuan3D to interpret.
+* [x] **Single Object Enforcement:** Update Llama 3 system prompt to strictly forbid scenes, backgrounds, or multiple objects using CNC/stone-carving metaphors.
+* [x] **Monochrome Logic (AO/Clay):** Enforced "Ambient Occlusion (AO) Render" and "Clay Sculpt" logic to eliminate color bleeding. Added strict neutral-gray pixel constraints in Flux suffix.
+* [x] **Structural Primitives (DfAM):** Added instructions for pyramidal/conical foundations and zero-overhang geometry to ensure support-free FDM printing.
+
+---
+
+## Phase 15: Final Quality Assurance & Hardening
+
+* [x] **Stress Test Prompts:** Run diverse hobbies (e.g., "fireman", "underwater diving", "gardening") to ensure character-props fusions stay monolithic.
+* [x] **NSFW Mitigation:** Monitor for false-positive NSFW triggers in clinical AM language (apex, foundation, foundation).
+* [ ] **RunPod Hand-off:** Prepare final instructions for transitioning from local AI engine to production GPU endpoint.
 
 ---
 

@@ -6,9 +6,9 @@
 
 ---
 
-## 🏆 Current Milestone: Stateless Studio & Persistent UX Complete ✅
+## 🏆 Current Milestone: DfAM Printability & Slicing Integration Complete ✅
 
-The 3D Studio now supports seamless back-and-forth navigation without data loss or geometry corruption. Raw and Manifold models are handled as separate entities in a dual-path pipeline.
+The 3D pipeline is now "Production Hardened." AI prompts strictly follow Additive Manufacturing (AM) rules, and the Slicer-to-Checkout flow is fully integrated with actual material math.
 
 **Previous milestone (2026-02-26):** Manifold Geometry Studio & Payment Logic.
 
@@ -17,12 +17,14 @@ The 3D Studio now supports seamless back-and-forth navigation without data loss 
 ## ✅ What Works Right Now (Complete Feature Set)
 
 1. **Full pipeline end-to-end:** Hobbies → Llama → Flux × 4 → 3D Model → Studio (Rounded Engraving) → Real Slicing → Checkout (EUR sync).
-2. **High-Stability CSG:** Browser-side geometry merging uses `.toNonIndexed()` and strict attribute filtering (position/normal) to prevent crashes.
-3. **Rounded Safety Pedestal:** Custom `LatheGeometry`-based cylinder with rounded edges for physical safety and premium aesthetics.
-4. **Stable Geometry Viewer:** Prevented "exploding spikes" and disappearing models by implementing safe-centering and geometry cloning (read-only cache protection).
-5. **Sync'd Payment Engine:** Backend Cloudflare Worker now correctly handles **EUR (€)** transactions with a **3.90€** shipping fee, matching the frontend UI exactly.
-6. **Local loopback (127.0.0.1):** Shifted away from fragile localtunnels for internal AI/Slicer communication to guarantee reliability during development.
-7. **Infrastructure:** Dockerized AI Engine (GPU) and Slicer (CPU) running locally on ports 8000 and 8001.
+2. **DfAM Prompt Engineering:** High-stability prompts using "CNC carving" metaphors to ensure monolithic, single-object, monochrome outputs optimized for FDM printing.
+3. **Automated Slicing & Pricing:** Real-time G-code generation with material mass calculation (PLA) and accurate pricing feedback.
+4. **High-Stability CSG:** Browser-side geometry merging uses `.toNonIndexed()` and strict attribute filtering (position/normal) to prevent crashes.
+5. **Rounded Safety Pedestal:** Custom `LatheGeometry`-based cylinder with rounded edges for physical safety and premium aesthetics.
+6. **Stable Geometry Viewer:** Prevented "exploding spikes" and disappearing models by implementing safe-centering and geometry cloning (read-only cache protection).
+7. **Sync'd Payment Engine:** Backend Cloudflare Worker now correctly handles **EUR (€)** transactions with a **3.90€** shipping fee, matching the frontend UI exactly.
+8. **Local loopback (127.0.0.1):** Shifted away from fragile localtunnels for internal AI/Slicer communication to guarantee reliability during development.
+9. **Infrastructure:** Dockerized AI Engine (GPU) and Slicer (CPU) running locally on ports 8000 and 8001.
 
 ---
 

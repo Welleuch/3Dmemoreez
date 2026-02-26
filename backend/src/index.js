@@ -272,50 +272,65 @@ export default {
                 ).bind(sessionId, JSON.stringify(hobbies), "selection").run();
 
                 // 3.1 Llama Prompt Orchestration
-                const systemPrompt = `You are an expert 3D Design Engineer specializing in Additive Manufacturing (FDM) and product photography.
-Task: Convert user hobbies/facts into 4 distinct image generation prompts for Flux Schnell.
+                const systemPrompt = `You are an expert 3D Design Engineer specializing in Additive Manufacturing (FDM) and catchy, whimsical product design.
+Task: Convert hobbies into 4 distinct, "WOW-factor" image generation prompts for Flux Schnell.
 
-=== BACKGROUND & LIGHTING — NON-NEGOTIABLE ===
-EVERY prompt MUST produce an image that looks like a professional product photo:
-- PURE WHITE background. Not off-white, not gray, not gradient — pure white (#FFFFFF).
-- NO shadows, NO drop shadows, NO reflections on the background.
-- NO dark gradient behind the object.
-- NO environmental context (no floor, no shelf, no studio visible).
-- Isolated object floating or standing on a pure white void.
-- Lighting: flat, even, diffuse studio softbox lighting. No dramatic rim lighting.
+=== THE "CATCHY" MANDATE — CRITICAL ===
+- Your goal is to IMPRESS and SURPRISE the user.
+- AVOID boring, literal mixes (e.g., "a spoon that looks like a book").
+- INSTEAD, create humorous, epic, or whimsical fusions.
+- USE anthropomorphism or caricature (e.g., "a grumpy coffee mug wearing a crown of flowers" or "a heroic cat dressed as a marathon runner").
+- Everything must still be carved from a SINGLE MONOLITHIC MASS.
 
-=== OBJECT STYLE ===
-- The subject is ALWAYS a gray matte clay sculpture / gray PLA 3D-printed figurine.
-- NO photorealistic textures. NO skin. NO hair. NO fur. NO glass. NO metals.
-- Matte gray filament color — think: gray plastic toy or unpainted clay.
-- Solid, monolithic form. No thin wires or floating disconnected parts.
+=== SINGLE-OBJECT FOCUS & COMPOSITION — STRICTLY ENFORCED ===
+- The image MUST contain ONLY ONE single, continuous, fused 3D mass.
+- NO scenes. NO environments. NO characters interacting with separated props.
+- EVERY element must be carved out of the same single block of digital clay.
+- NO floor, NO ground plane, NO casting shadows onto a surface.
+- The object MUST be isolated, floating in a pure white void.
+- Imagine the prompt is for a CNC machine carving from a single chunk of stone.
 
-=== 3D PRINTABILITY CONSTRAINTS ===
-1. Base: Every object must have a clearly defined, flat, and wide structural base.
-2. Overhangs: Avoid angles steeper than 45 degrees. Use organic, tapered transitions.
-3. Thickness: No part thinner than 2.0mm. No whisker or hair textures.
+=== AMBIENT OCCLUSION & CLAY RENDER LOGIC — NON-NEGOTIABLE ===
+- You MUST explicitly format your prompts to request an "Ambient Occlusion (AO) render".
+- NEVER mention any color names (red, blue, green, etc.).
+- NEVER mention materials like "wood", "metal", "glass", "fabric", or "colored plastic".
+- The entire object is an "untextured, monochrome neutral gray clay sculpt".
+- PURE WHITE background. Use the exact phrase: "solid white background #FFFFFF".
+- Lighting: "flat studio lighting, AO pass, completely shadowless".
+- The prompt MUST EXPLICITLY begin with: "An untextured ambient occlusion clay scan of a single solid..."
+
+=== DfAM (DESIGN FOR ADDITIVE MANUFACTURING) — CRITICAL ===
+- Geometry MUST be pyramidal or conical: wider at the foundation, tapering to an apex.
+- ZERO UNDERCUTS. ZERO OVERHANGS. ZERO THIN PROTRUSIONS.
+- If depicting a person: they MUST be presented as a "fused silhouette" or "high-relief carving" part of the main monolithic mass. NO separate limbs sticking out.
+- Describe details as "low-depth engravings" or "subtle surface extrusions" rather than separate pieces.
+- Base: The model MUST sit on a thick, flat, integrated circular pedestal foundation.
+- Vocabulary: Use "monolithic block", "fused volumes", "solid mass", "tapered geometry".
+- Avoid NSFW triggers: Do not use "tip", "top", "bottom", "handle", "shaft". Use "apex", "highest point", "foundation", "base".
 
 === SAFETY & COMPLIANCE — CRITICAL ===
 - NO HUMAN SKIN, NO realistic anatomy, NO provocative poses.
 - EVERYTHING must be SFW and family-friendly.
 - If depicting humans: they MUST be fully clothed in thick, sculptural clothing or depicted as abstract, non-anatomical stone/clay silhouettes.
 - Focus on inanimate objects, animals, or highly stylized, clothed figurines.
-- AVOID words that often trigger false positives: "curvy", "fleshy", "skin", "naked", "tight", "sensual", "hot", "bottom", "top", "rear", "front" (when describing bodies).
+- AVOID words that often trigger false positives: "curvy", "fleshy", "skin", "naked", "tight", "sensual", "hot", "bottom", "rear", "front" (when describing bodies).
 - Instead use clinical/design terms: "structural", "volumetric", "geometric", "monolithic", "matte", "opaque".
 - Use object-centric language (e.g., "A gray clay figurine of a hiker in a heavy coat" NOT "A realistic hiker").
 
 Generate 4 concepts:
-- 2 Literal: Sturdy, fused mashups of the objects.
-- 2 Artistic: Solid, sculptural, low-poly or clay-sculpted aesthetic.
+1. "Whimsical / Funny": A humorous or unexpected fusion that makes the user smile.
+2. "Heroic / Epic": A grand, highly stylized representation (as a fused relief or monolithic statue).
+3. "Surprising Hybrid": A clever, catchy combination of the user's hobbies into one iconic mass.
+4. "The Artistic Icon": A minimal, low-poly, or abstract clay sculpture representing the spirit of the story.
 
-CRITICAL: Return ONLY a raw JSON object. NO conversational text. NO preamble (e.g., "Here are the prompts"). NO markdown code blocks.
+CRITICAL: Return ONLY a raw JSON object. NO conversational text. NO markdown code blocks.
 START your response with "{" and END with "}".
 Structure:
 {
   "concepts": [
-    { "title": "Concept Name", "prompt": "Flux prompt...", "type": "Literal" },
-    { "title": "Concept Name", "prompt": "Flux prompt...", "type": "Literal" },
-    { "title": "Concept Name", "prompt": "Flux prompt...", "type": "Artistic" },
+    { "title": "Concept Name", "prompt": "Flux prompt...", "type": "Whimsical" },
+    { "title": "Concept Name", "prompt": "Flux prompt...", "type": "Heroic" },
+    { "title": "Concept Name", "prompt": "Flux prompt...", "type": "Hybrid" },
     { "title": "Concept Name", "prompt": "Flux prompt...", "type": "Artistic" }
   ]
 }`;
@@ -344,9 +359,11 @@ Structure:
                     throw new Error(`Failed to parse Llama response into JSON. Raw response: ${content}`);
                 }
 
+                console.log("[LLAMA] Concepts generated:", JSON.stringify(result, null, 2));
+
                 // 3.2 Flux Image Generation (Parallel)
-                // Hard-coded suffix appended to every Flux prompt to guarantee white-background product shot
-                const FLUX_SUFFIX = ", gray matte clay sculpture, SFW, family friendly, fully clothed, pure white studio background, product photography, isolated object, no shadows, no gradient, no environment, flat even lighting, professional product shot";
+                // Hard-coded suffix appended to every Flux prompt to guarantee white-background product shot and single geometric body
+                const FLUX_SUFFIX = ", 3D untextured clay render, ambient occlusion pass, solid matte gray geometric shape, single monolithic fused mass, pyramidal composition, no overhangs, no undercuts, Support-Free FDM design, completely monochrome, absence of any color, neutral gray pixels only, solid white background #FFFFFF, isolated floating object, no shadows, no scenery";
 
                 const generationPromises = result.concepts.map(async (concept) => {
                     try {
@@ -451,7 +468,7 @@ Structure:
                     "UPDATE Assets SET status = 'processing' WHERE session_id = ? AND image_url LIKE ?"
                 ).bind(session_id, `%${concept_id}%`).run();
 
-                const AI_ENGINE_URL = env.AI_ENGINE_URL || "http://127.0.0.1:8000/generate-3d";
+                const AI_ENGINE_URL = env.RUNPOD_ENDPOINT_URL || env.AI_ENGINE_URL || "http://127.0.0.1:8000/generate-3d";
                 // When running locally on Windows with Docker, the AI engine container 
                 // needs to reach the worker on the host. Use host.docker.internal.
                 const origin = url.origin.includes('localhost') || url.origin.includes('127.0.0.1')

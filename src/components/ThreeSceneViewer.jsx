@@ -249,7 +249,7 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
             console.error("Finalization Error:", err);
             onNext({
                 sessionId: sessionId,
-                printEstimate: { total_material_grams: 120, total_material_cost: 3.60, print_time_display: "9h 30m" },
+                printEstimate: { total_material_grams: 45, total_material_cost: 1.35, print_time_display: "4h 15m" },
                 line1,
                 line2,
                 stlUrl
