@@ -266,3 +266,4 @@
 * [x] **Visual Feedback:** Added a "Engraving..." status indicator when the 3D model is regenerating geometry.
 * [x] **Vertical Offset:** Adjusted `centerY` overlap to `0.05` for a structurally sound but clean merge.
 * [x] **CSG Stability:** Implemented geometry normalization (`toNonIndexed`) and attribute filtering (position/normal only) to prevent browser crashes during merge.
+* [x] **Persistence & Dual-Path Storage:** Separated Raw Character and Final Manifold model paths in D1/R2. Lifted engraving state to App component to ensure text survives navigation (back-and-forth) between Studio and Checkout.

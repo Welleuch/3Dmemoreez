@@ -536,7 +536,7 @@ Structure:
                 const sessionId = url.searchParams.get("session_id");
                 const assetId = url.searchParams.get("asset_id");
 
-                let query = "SELECT status, stl_r2_path FROM Assets WHERE session_id = ?";
+                let query = "SELECT status, stl_r2_path, final_stl_r2_path FROM Assets WHERE session_id = ?";
                 let params = [sessionId];
 
                 if (assetId) {
@@ -575,15 +575,16 @@ Structure:
 
                 // Get STL from DB to find the R2 path
                 const asset = await env.DB.prepare(
-                    "SELECT stl_r2_path FROM Assets WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
+                    "SELECT final_stl_r2_path, stl_r2_path FROM Assets WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
                 ).bind(session_id, asset_id, `%${asset_id}%`).first();
 
-                if (!asset || !asset.stl_r2_path) {
+                const stlKey = asset?.final_stl_r2_path || asset?.stl_r2_path;
+                if (!stlKey) {
                     return new Response(JSON.stringify({ error: "STL not found or not ready" }), { status: 404, headers: corsHeaders });
                 }
 
                 // Fetch STL binary from R2
-                const stlObject = await env.ASSETS_BUCKET.get(asset.stl_r2_path);
+                const stlObject = await env.ASSETS_BUCKET.get(stlKey);
                 if (!stlObject) {
                     return new Response(JSON.stringify({ error: "STL file not found in R2" }), { status: 404, headers: corsHeaders });
                 }
@@ -651,9 +652,9 @@ Structure:
                     httpMetadata: { contentType: "model/stl" }
                 });
 
-                // Update Asset metadata so we know this asset has a final version
+                // Update Asset metadata with final version path, but keep original stl_r2_path for raw editing
                 await env.DB.prepare(
-                    "UPDATE Assets SET stl_r2_path = ? WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
+                    "UPDATE Assets SET final_stl_r2_path = ? WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
                 ).bind(finalStlKey, session_id, asset_id, `%${asset_id}%`).run();
 
                 return new Response(JSON.stringify({ success: true, path: finalStlKey }), {
@@ -694,8 +695,10 @@ Structure:
 
                 // Get asset paths
                 const asset = await env.DB.prepare(
-                    "SELECT stl_r2_path FROM Assets WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
+                    "SELECT stl_r2_path, final_stl_r2_path FROM Assets WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
                 ).bind(session_id, asset_id, `%${asset_id}%`).first();
+
+                const finalStlPath = asset?.final_stl_r2_path || asset?.stl_r2_path;
 
                 // Save Order as pending
                 await env.DB.prepare(`
@@ -708,7 +711,7 @@ Structure:
                     orderId, session_id, email, receiver_first_name, receiver_last_name,
                     shipping_address, totalCents, materialGrams,
                     Math.round((stats?.estimated_print_time_seconds || 0) / 60),
-                    asset?.stl_r2_path || null,
+                    asset?.final_stl_r2_path || asset?.stl_r2_path || null,
                     `gcode___${session_id}___${asset_id}.gcode` // Assuming this path based on slicer logic
                 ).run();
 

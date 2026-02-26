@@ -46,11 +46,14 @@
    ▼
 [User Browser — polls /api/session/status]
    │  • Detects status = 'completed'
-   │  • Fetches STL via /api/assets/{stl_r2_path}
+   │  • Fetches RAW STL via /api/assets/{stl_r2_path}
    │  • Loads and renders in React Three Fiber
    ▼
 [3D Studio Geometry Engine]
    │  • BVH-CSG: High-performance boolean operations in browser.
+   │  • Dual-Path Storage: Database keeps both stl_r2_path (raw) and final_stl_r2_path (manifold).
+   │  • Persistence: Engraving text (line1/line2) lifted to App state to survive navigation.
+   │  • Raw-First Loading: Studio always loads raw STL to prevent "stacked pedestal" recursion.
    │  • High-Stability Normalization: .toNonIndexed() applied to all meshes.
    │  • Strict Attribute Filter: Evaluator forced to ['position', 'normal'] to prevent crashes.
    │  • Rounded Safety Pedestal: Custom LatheGeometry rounded cylinder.
@@ -169,6 +172,7 @@ CREATE TABLE Assets (
     image_url TEXT,
     status TEXT DEFAULT 'generated',   -- generated | processing | completed | failed
     stl_r2_path TEXT,
+    final_stl_r2_path TEXT, -- Added for manifold model storage
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```

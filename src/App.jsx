@@ -39,6 +39,8 @@ export default function App() {
     const [sessionId, setSessionId] = useState(() => localStorage.getItem('3dmemoreez_session_id'));
     const [isGenerating, setIsGenerating] = useState(false);
     const [finalizedData, setFinalizedData] = useState(null);
+    const [line1, setLine1] = useState('');
+    const [line2, setLine2] = useState('');
 
     // Initial load: check for Stripe success redirect OR restore session
     useEffect(() => {
@@ -269,6 +271,10 @@ export default function App() {
                                     <ThreeSceneViewer
                                         selectedConcept={selectedConcept}
                                         sessionId={sessionId}
+                                        line1={line1}
+                                        setLine1={setLine1}
+                                        line2={line2}
+                                        setLine2={setLine2}
                                         onNext={handleFinalize}
                                         onBack={prevStep}
                                     />

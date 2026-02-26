@@ -169,9 +169,7 @@ function AIModel({ url, onLoaded }) {
     );
 }
 
-export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, onBack }) {
-    const [line1, setLine1] = useState('');
-    const [line2, setLine2] = useState('');
+export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, setLine1, line2, setLine2, onNext, onBack }) {
     const [isProcessing, setIsProcessing] = useState(false);
     const [status, setStatus] = useState('processing');
     const [stlUrl, setStlUrl] = useState(null);
@@ -191,6 +189,8 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
 
                 if (currentAsset?.status === 'completed' && currentAsset.stl_r2_path) {
                     setStatus('completed');
+                    // ALWAYS use the raw model (stl_r2_path) for the 3D Studio. 
+                    // This ensures that if the user goes back, they aren't loading a manifold model that already has a pedestal.
                     setStlUrl(`${API_BASE_URL}/api/assets/${currentAsset.stl_r2_path}`);
                 } else if (currentAsset?.status === 'failed') {
                     setStatus('failed');

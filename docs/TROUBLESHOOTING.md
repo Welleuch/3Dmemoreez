@@ -291,6 +291,24 @@ Synced `backend/src/index.js` with the frontend constants:
 
 ---
 
+## ❌ Error 12 — Double Pedestal / "Stacked" Geometry
+
+### Symptom
+When navigating back from Checkout to the 3D Studio, a new pedestal is generated underneath the existing one (which already had engraving).
+
+### Root Cause
+**Manifold Overwrite**: Previously, the system saved the merged (figuiring + pedestal) STL back into the same database column (`stl_r2_path`) used for the raw figurine. 
+- Step 1: User finishes studio -> Merged model is saved to `stl_r2_path`.
+- Step 2: User goes back -> Studio loads `stl_r2_path` (the merged model).
+- Step 3: Studio code sees "A figurine" and adds a pedestal to it. Since the "figurine" already had a pedestal, it now has two.
+
+### ✅ Fix Applied
+1. **Dual-Path DB Schema**: Added `final_stl_r2_path` column to the `Assets` table.
+2. **Raw-Priority Studio**: The `ThreeSceneViewer` is now hardcoded to **always load the original `stl_r2_path`**. This ensures the studio ALWAYS starts with the clean, raw character.
+3. **State Persistence**: Engraving text (`line1`, `line2`) was lifted to `App.jsx` state. Even if the component remounts, the text is preserved and applied to the clean raw model.
+
+---
+
 ## 🚀 Correct Local Dev Startup (Definitive)
 
 Run these in order. Each in its own terminal:
