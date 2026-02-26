@@ -451,9 +451,13 @@ Structure:
                     "UPDATE Assets SET status = 'processing' WHERE session_id = ? AND image_url LIKE ?"
                 ).bind(session_id, `%${concept_id}%`).run();
 
-                const AI_ENGINE_URL = env.AI_ENGINE_URL || "https://3dmemoreez-ai.loca.lt/generate-3d";
-                // Let the python script reply back dynamically to wherever the worker is hosted (e.g. 127.0.0.1:8787)
-                const WEBHOOK_URL = `${url.origin}/api/webhook/runpod`;
+                const AI_ENGINE_URL = env.AI_ENGINE_URL || "http://127.0.0.1:8000/generate-3d";
+                // When running locally on Windows with Docker, the AI engine container 
+                // needs to reach the worker on the host. Use host.docker.internal.
+                const origin = url.origin.includes('localhost') || url.origin.includes('127.0.0.1')
+                    ? 'http://host.docker.internal:8787'
+                    : url.origin;
+                const WEBHOOK_URL = `${origin}/api/webhook/runpod`;
 
                 // Trigger 3D Engine
                 try {
@@ -629,6 +633,34 @@ Structure:
                 }
             }
 
+            // 8.1 Upload Final Merged STL (from Frontend CSG)
+            if (url.pathname === "/api/assets/upload-final" && request.method === "POST") {
+                const formData = await request.formData();
+                const session_id = formData.get("session_id");
+                const asset_id = formData.get("asset_id");
+                const file = formData.get("file");
+
+                if (!file) {
+                    return new Response(JSON.stringify({ error: "No file uploaded" }), { status: 400, headers: corsHeaders });
+                }
+
+                const finalStlKey = `final___${session_id}___${asset_id}.stl`;
+
+                // Store in R2
+                await env.ASSETS_BUCKET.put(finalStlKey, await file.arrayBuffer(), {
+                    httpMetadata: { contentType: "model/stl" }
+                });
+
+                // Update Asset metadata so we know this asset has a final version
+                await env.DB.prepare(
+                    "UPDATE Assets SET stl_r2_path = ? WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
+                ).bind(finalStlKey, session_id, asset_id, `%${asset_id}%`).run();
+
+                return new Response(JSON.stringify({ success: true, path: finalStlKey }), {
+                    headers: { ...corsHeaders, "Content-Type": "application/json" }
+                });
+            }
+
             // 9. Create Stripe Checkout Session
             if (url.pathname === "/api/checkout/create-session" && request.method === "POST") {
                 const body = await request.json();
@@ -654,7 +686,7 @@ Structure:
                 const materialGrams = stats?.total_material_grams || 0;
                 const materialCost = stats?.total_material_cost || 0;
                 const baseServiceFee = 12.00;
-                const shippingFee = 9.00;
+                const shippingFee = 3.90; // Synced with frontend Checkout.jsx
                 const totalInvestment = materialCost + baseServiceFee + shippingFee;
                 const totalCents = Math.round(totalInvestment * 100);
 
@@ -689,7 +721,7 @@ Structure:
                     line_items: [
                         {
                             price_data: {
-                                currency: 'usd',
+                                currency: 'eur', // Synced with frontend UI
                                 product_data: {
                                     name: '3Dmemoreez Custom Figurine',
                                     description: `Precision printed in PLA (${materialGrams}g). Includes AI modeling and global express shipping.`,

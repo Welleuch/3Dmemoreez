@@ -16,9 +16,10 @@ For every vertex in the `TextGeometry`:
     -   `newY = vertex.y` (vertical height remains unchanged)
 3.  **Result**: This creates a perfect arc where the text "hugs" the cylinder surface precisely.
 
-## 2. 3D Printing Constraints (FDM Optimized)
+## 2. 3D Printing Constraints & Safety (FDM Optimized)
 
 The engine is tuned for a standard **0.4mm nozzle** and **0.25mm layer height**:
+-   **Rounded Safety Base**: Pedestal now uses a custom `LatheGeometry` to create a cylinder with rounded (fillet) top and bottom edges. This ensures the physical 3D print has no sharp 90-degree corners, making it safer to handle and more premium in feel.
 -   **Extraction Depth**: **0.04 units** (approx. **0.4mm**). Matches exactly one nozzle-width of depth for high legibility without weakening the part.
 -   **Text Thickness**: **0.06 units**. Ensures a clean, watertight boolean subtraction.
 -   **Vertical Spacing**: Adjusted for clear separation between Line 1 (Name) and Line 2 (Date/Message).
@@ -26,9 +27,10 @@ The engine is tuned for a standard **0.4mm nozzle** and **0.25mm layer height**:
 ## 3. Computational Logic: three-bvh-csg
 
 The system uses `three-bvh-csg` for browser-side geometry processing:
--   **Normalized Grounding**: Before boolean operations, the figurine is translated so its lowest point is exactly at `Y=0`. The pedestal is then positioned to overlap by `0.1 units`, ensuring a watertight union.
--   **Attribute Sanitization**: Before any subtraction or union, all geometries are stripped of `UV`, `color`, and `tangent` attributes. Only `position` and `normal` are preserved to ensure 100% compatibility across varying STL source models.
--   **Double-Model Handshake**: To maintain a 60FPS UI, the "merged" model is calculated in the background. Once ready, the original preview figurine is hot-swapped for the merged result to eliminate "ghosting" effects.
+-   **High-Stability Normalization**: All meshes (pedestal, text, figurine) are processed via `.toNonIndexed()` and have all non-essential attributes (UV, color, tangent) stripped. This prevents the "undefined push" crash caused by index/attribute mismatches.
+-   **Safe Centering**: Figurine is centered once using a tolerance-checked `translate` to avoid the "exploding spiked geometry" loop caused by repetitive transformations.
+-   **Watertight Union**: Figurine and pedestal overlap by `0.05 units`. The figurine is **cloned** before modification to ensure the React loader cache remains pristine.
+-   **Double-Model Handshake**: To maintain a 60FPS UI, the "merged" model is calculated in the background. Once ready, the original preview figurine is hot-swapped for the merged result.
 
 ## 4. Typography
 

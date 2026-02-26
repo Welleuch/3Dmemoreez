@@ -259,9 +259,10 @@
 
 ---
 
-## Phase 14: CSG Pedestal & UX Refinements
+## Phase 14: CSG Pedestal & UX Refinements — ✅ COMPLETE (2026-02-26)
 
-* [ ] **Safety Rounding:** Modify the pedestal geometry to round off sharp corners (Fillet/Rounded corners) for a more premium, safe feel.
-* [ ] **Engraving UX (Lag Fix):** Implement debouncing (300ms) for the real-time engraving updates to prevent UI hanging while the user types.
-* [ ] **Visual Feedback:** Add a subtle "Engraving..." status or spinner when the 3D model is regenerating its geometry.
-* [ ] **Vertical Offset:** Adjust the `centerY` overlap calculation to something shallower like `0.02` or `0.05` for a cleaner merge.
+* [x] **Safety Rounding:** Modified pedestal geometry to a custom rounded cylinder (LatheGeometry) for a premium, safe feel.
+* [x] **Engraving UX (Lag Fix):** Implemented debouncing (300ms) for real-time engraving updates to prevent UI hanging.
+* [x] **Visual Feedback:** Added a "Engraving..." status indicator when the 3D model is regenerating geometry.
+* [x] **Vertical Offset:** Adjusted `centerY` overlap to `0.05` for a structurally sound but clean merge.
+* [x] **CSG Stability:** Implemented geometry normalization (`toNonIndexed`) and attribute filtering (position/normal only) to prevent browser crashes during merge.

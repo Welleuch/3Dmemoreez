@@ -1,6 +1,6 @@
 # 3Dmemoreez — Troubleshooting Guide
 
-> Last updated: 2026-02-21
+> Last updated: 2026-02-26
 
 This document captures **recurring bugs** with their root causes and fixes so they don't need to be re-diagnosed in new chat sessions.
 
@@ -188,11 +188,11 @@ This caches the model at `~/.u2net/isnet-general-use.onnx` (or similar). After t
  ### Root Cause
  Different geometries (STLs vs. Three.js primitives) have different vertex attributes. If one mesh has UV coordinates and the other doesn't, the CSG evaluator crashes.
  
- ### ✅ Fix Applied
- **Attribute Sanitization**:
- - The engine now stripped away all attributes except `position` and `normal` before any CSG operation.
- - `evaluator.attributes = ['position', 'normal']` is set globally.
-  - Both the text and figurine geometries are passed through a sanitizer that creates a clean `BufferGeometry` with only these two attributes.
+ ### ✅ Fix Applied (Attribute Normalization)
+ **Unified Format Enforcement**:
+ - The engine now forces all geometries (STLs, Text, Primitives) to a **non-indexed** format using `.toNonIndexed()`.
+ - This prevents the `TypeError: Cannot read properties of undefined (reading 'push')` or `(reading 'array')` which happens when the CSG engine tries to merge indexed and non-indexed meshes.
+ - `evaluator.attributes = ['position', 'normal']` is set globally to ignore UVs/Colors that might be missing in one of the parts.
 
 ---
 
@@ -259,6 +259,37 @@ scaled_mesh.apply_scale(combined_scale)
 - Hunyuan3D outputs in inches (most 3D apps default to inches)
 - Must multiply by 25.4 to convert to mm
 - Then scale to target height (100mm)
+
+## ❌ Error 10 — Model "Explodes" into Spikes or Disappears on Zoom/Orbit
+
+### Symptom
+While orbiting the camera or zooming in the 3D Studio, the figurine suddenly transforms into crazy long spikes or vanishes entirely.
+
+### Root Cause
+**In-place Geometry Corruption**: The `three-stl-loader` caches geometry objects. The previous code was calling `geom.translate()` directly on those cached objects. Every time the component re-rendered (on zoom/camera move), it would "stack" translations.
+- Result 1: Coordinates became so large they hit `NaN` or infinity (spikes).
+- Result 2: The model was pushed thousands of units away from the camera (disappearing).
+
+### ✅ Fix Applied
+1. **Safe Centering**: In `ThreeSceneViewer.jsx`, the centering logic now checks `if (Math.abs(center.x) > 0.001 ...)` to only apply the translation **once**.
+2. **Read-Only Clones**: In `csgEngine.js`, the figurine geometry is now **cloned** (`figurineMesh.geometry.clone()`) before being used for CSG. This ensures the loader's cache remains untouched and stable.
+
+---
+
+## ❌ Error 11 — "Price/Currency Mismatch" on PayPal Redirect
+
+### Symptom
+Checkout shows `19.10€`, but the PayPal/Stripe page shows `$24.20` or a different amount.
+
+### Root Cause
+The backend `create-session` logic had hardcoded USD as the currency and an outdated shipping fee (9.00€ vs the new 3.90€).
+
+### ✅ Fix Applied
+Synced `backend/src/index.js` with the frontend constants:
+- `currency: 'eur'`
+- `shippingFee: 3.90`
+
+---
 
 ## 🚀 Correct Local Dev Startup (Definitive)
 

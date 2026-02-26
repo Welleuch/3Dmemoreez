@@ -1,6 +1,6 @@
 # 3Dmemoreez — System Architecture Map
 
-> Last updated: 2026-02-21
+> Last updated: 2026-02-26
 
 ---
 
@@ -22,14 +22,14 @@
    ▼
 [Cloudflare Worker]
    │  • Sets asset status = 'processing' in D1
-   │  • Fires async POST → localtunnel → Docker AI Engine
+   │  • Fires async POST → 127.0.0.1:8000 → Docker AI Engine (Local Dev)
    │
    │  (fire-and-forget via ctx.waitUntil)
    ▼
-[Localtunnel → https://3dmemoreez-ai.loca.lt]
+[Local Loopback → 127.0.0.1]
    │
    ▼
-[Local AI Engine — localhost:8000 (venv/uvicorn)]
+[Local AI Engine — 127.0.0.1:8000 (Docker)]
    │  • Downloads image from R2 via /api/assets/{key}
    │  • rembg (isnet-general-use) background removal → RGBA transparent canvas
    │  • Runs Hunyuan3D-V2 3-stage inference (GPU — RTX 5060)
@@ -51,11 +51,13 @@
    ▼
 [3D Studio Geometry Engine]
    │  • BVH-CSG: High-performance boolean operations in browser.
-   │  • Normalized Grounding: Figurine translated to Y=0 to anchor pedestal.
+   │  • High-Stability Normalization: .toNonIndexed() applied to all meshes.
+   │  • Strict Attribute Filter: Evaluator forced to ['position', 'normal'] to prevent crashes.
+   │  • Rounded Safety Pedestal: Custom LatheGeometry rounded cylinder.
    │  • Cylindrical Vertex Wrapping: Text bent to match pedestal arc.
-   │  • Constant-Depth Engraving: 0.4mm depth (0.04 units) for FDM compliance.
+   │  • Constant-Depth Engraving: 0.4mm depth for structural FDM compliance.
    ▼
-[3D Viewer + Pedestal + Engraving]
+[3D Viewer + Rounded Pedestal + Engraving]
 ```
 
 ---
@@ -78,7 +80,7 @@
 - `asset_id` (optional) — UUID of the specific concept image chosen
 
 ### Local AI Engine (Docker)
-`http://localhost:8000` (tunneled via `https://3dmemoreez-ai.loca.lt`)
+`http://127.0.0.1:8000`
 
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -88,7 +90,7 @@
 **Request body for `/generate-3d`:**
 ```json
 {
-  "image_url": "https://3d-memoreez-orchestrator.walid-elleuch.workers.dev/api/assets/concepts___SESSION___ASSET.png",
+  "image_url": "http://127.0.0.1:8787/api/assets/concepts___SESSION___ASSET.png",
   "webhook_url": "https://3d-memoreez-orchestrator.walid-elleuch.workers.dev/api/webhook/runpod",
   "session_id": "UUID",
   "asset_id": "UUID"

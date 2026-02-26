@@ -3,11 +3,9 @@ import { SUBTRACTION, ADDITION, Brush, Evaluator } from 'three-bvh-csg';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader';
 
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry';
-
 const evaluator = new Evaluator();
 evaluator.usePrecomputedNormals = true;
-evaluator.attributes = ['position', 'normal']; // Force ignore UVs globally
+evaluator.attributes = ['position', 'normal'];
 
 /**
  * Bends a geometry around a cylinder of the given radius.
@@ -47,6 +45,43 @@ export async function loadFont() {
 }
 
 /**
+ * Creates a cylinder with rounded top and bottom edges (fillet).
+ */
+function createRoundedCylinderGeometry(radius, height, bevel, segments = 64) {
+    const points = [];
+    const innerRadius = radius - bevel;
+    const halfH = height / 2;
+
+    // Bottom center part
+    points.push(new THREE.Vector2(0, -halfH));
+    points.push(new THREE.Vector2(innerRadius, -halfH));
+
+    // Bottom corner arc
+    for (let i = 1; i <= 8; i++) {
+        const angle = (i / 8) * Math.PI * 0.5;
+        points.push(new THREE.Vector2(
+            innerRadius + Math.sin(angle) * bevel,
+            -halfH + bevel - Math.cos(angle) * bevel
+        ));
+    }
+
+    // Top corner arc
+    for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 0.5 + Math.PI * 0.5;
+        points.push(new THREE.Vector2(
+            innerRadius + Math.sin(angle) * bevel,
+            halfH - bevel - Math.cos(angle) * bevel
+        ));
+    }
+
+    // Top center part
+    points.push(new THREE.Vector2(innerRadius, halfH));
+    points.push(new THREE.Vector2(0, halfH));
+
+    return new THREE.LatheGeometry(points, segments);
+}
+
+/**
  * Generates a unified 3D printable model using CSG.
  * Ensures the pedestal is correctly positioned under the model base.
  */
@@ -62,20 +97,20 @@ export async function createEngravedPedestalCSG(figurineMesh, _unusedBounds, lin
     const modelDepth = (max.z - min.z);
 
     const radius = Math.max(modelWidth, modelDepth) / 2 + padding;
-    const width = radius * 2; // Fixed ReferenceError
+    const bevel = 0.05; // 0.5mm safe rounding
 
-    // Using CylinderGeometry for a premium, circular look
-    const pedestalGeom = new THREE.CylinderGeometry(radius, radius, height, 64);
+    // Using custom Rounded Cylinder for premium, safe look
+    const pedestalGeom = createRoundedCylinderGeometry(radius, height, bevel, 64);
 
-    // STL models don't have UVs, so we strip them from the pedestal to avoid mismatch errors
-    pedestalGeom.deleteAttribute('uv');
+    // Ensure pedestal has normals
+    if (!pedestalGeom.getAttribute('normal')) pedestalGeom.computeVertexNormals();
 
     const pedestalBrush = new Brush(pedestalGeom);
 
     const centerX = (min.x + max.x) / 2;
     const centerZ = (min.z + max.z) / 2;
-    // POSITIONING: Top of cylinder = model bottom + 0.1 overlap
-    const centerY = min.y + 0.1 - (height / 2);
+    // POSITIONING: Top of cylinder = model bottom + 0.05 overlap
+    const centerY = min.y + 0.05 - (height / 2);
 
     pedestalBrush.position.set(centerX, centerY, centerZ);
     pedestalBrush.updateMatrixWorld();
@@ -103,7 +138,7 @@ export async function createEngravedPedestalCSG(figurineMesh, _unusedBounds, lin
                 textGeom.computeBoundingBox();
                 const textCenter = new THREE.Vector3();
                 textGeom.boundingBox.getCenter(textCenter);
-                textGeom.translate(-textCenter.x, 0, 0);
+                textGeom.translate(-textCenter.x, -textCenter.y, 0); // Center both X and Y
 
                 // 2. Wrap it around the cylinder curve
                 // We sink it exactly 0.04 units (approx 0.4mm - one nozzle diameter)
@@ -111,19 +146,15 @@ export async function createEngravedPedestalCSG(figurineMesh, _unusedBounds, lin
                 textGeom.translate(0, 0, -0.04);
                 wrapGeometry(textGeom, radius);
 
-                // 3. Clean attributes for CSG
-                const cleanGeom = new THREE.BufferGeometry();
-                cleanGeom.setAttribute('position', textGeom.getAttribute('position'));
-                cleanGeom.setAttribute('normal', textGeom.getAttribute('normal'));
-
-                const brush = new Brush(cleanGeom);
+                const brush = new Brush(textGeom);
                 // Position brush at pedestal center
-                brush.position.set(centerX, centerY + yOffset - textCenter.y, centerZ);
+                // Since we already centered textGeom on Y, we just offset by yOffset
+                brush.position.set(centerX, centerY + yOffset, centerZ);
                 brush.updateMatrixWorld();
                 return brush;
             };
 
-            const fontSize1 = Math.min(height * 0.35, width * 0.1);
+            const fontSize1 = Math.min(height * 0.35, radius * 0.2);
             // Increased vertical separation (yOffset)
             if (line1) {
                 const b1 = createTextBrush(line1, fontSize1, height * 0.22);
@@ -148,15 +179,13 @@ export async function createEngravedPedestalCSG(figurineMesh, _unusedBounds, lin
     // 3. Union with Figurine
     console.log("[CSG] Merging figurine...");
 
-    // Create a clean figurine geometry with only the necessary attributes
-    const cleanFigurineGeom = new THREE.BufferGeometry();
-    cleanFigurineGeom.setAttribute('position', figurineMesh.geometry.getAttribute('position'));
-    cleanFigurineGeom.setAttribute('normal', figurineMesh.geometry.getAttribute('normal'));
-    if (figurineMesh.geometry.index) {
-        cleanFigurineGeom.setIndex(figurineMesh.geometry.index);
+    // Create a clean figurine geometry clone
+    const figurineGeom = figurineMesh.geometry.clone();
+    if (!figurineGeom.getAttribute('normal')) {
+        figurineGeom.computeVertexNormals();
     }
 
-    const figurineBrush = new Brush(cleanFigurineGeom);
+    const figurineBrush = new Brush(figurineGeom);
     figurineBrush.position.copy(figurineMesh.position);
     figurineBrush.rotation.copy(figurineMesh.rotation);
     figurineBrush.scale.copy(figurineMesh.scale);

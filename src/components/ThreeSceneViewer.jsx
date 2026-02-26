@@ -12,14 +12,30 @@ import { ChevronLeft, ArrowRight, Type, Box, Zap, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:8787'
+    ? 'http://127.0.0.1:8787'
     : 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev';
 
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry';
-import { extend } from '@react-three/fiber';
 import { createEngravedPedestalCSG } from '../lib/csgEngine';
+import { STLExporter } from 'three/examples/jsm/exporters/STLExporter';
 
-extend({ RoundedBoxGeometry });
+function createRoundedCylinderGeometry(radius, height, bevel, segments = 64) {
+    const points = [];
+    const innerRadius = radius - bevel;
+    const halfH = height / 2;
+    points.push(new THREE.Vector2(0, -halfH));
+    points.push(new THREE.Vector2(innerRadius, -halfH));
+    for (let i = 1; i <= 8; i++) {
+        const angle = (i / 8) * Math.PI * 0.5;
+        points.push(new THREE.Vector2(innerRadius + Math.sin(angle) * bevel, -halfH + bevel - Math.cos(angle) * bevel));
+    }
+    for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 0.5 + Math.PI * 0.5;
+        points.push(new THREE.Vector2(innerRadius + Math.sin(angle) * bevel, halfH - bevel - Math.cos(angle) * bevel));
+    }
+    points.push(new THREE.Vector2(innerRadius, halfH));
+    points.push(new THREE.Vector2(0, halfH));
+    return new THREE.LatheGeometry(points, segments);
+}
 
 function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged }) {
     const [geometry, setGeometry] = useState(null);
@@ -56,7 +72,7 @@ function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged }) {
 
                 if (active) {
                     setGeometry(csgGeom);
-                    if (onMerged) onMerged();
+                    if (onMerged) onMerged(csgGeom);
                 }
             } catch (err) {
                 console.error("[STUDIO] CSG Failure:", err);
@@ -65,7 +81,7 @@ function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged }) {
             }
         }
 
-        const timer = setTimeout(init, 400);
+        const timer = setTimeout(init, 300); // Updated to 300ms as per TODO
         return () => {
             active = false;
             clearTimeout(timer);
@@ -79,7 +95,10 @@ function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged }) {
     const radius = Math.max(size.x, size.z) / 2 + 0.35; // Synced with CSG padding
     const centerX = localBounds ? (localBounds.min.x + localBounds.max.x) / 2 : 0;
     const centerZ = localBounds ? (localBounds.min.z + localBounds.max.z) / 2 : 0;
-    const centerY = localBounds ? localBounds.min.y + 0.1 - boxH / 2 : 0;
+    // Overlap adjusted to 0.05 as per TODO
+    const centerY = localBounds ? localBounds.min.y + 0.05 - boxH / 2 : 0;
+
+    const roundedCylinderFallback = useMemo(() => createRoundedCylinderGeometry(radius, boxH, 0.05), [radius, boxH]);
 
     return (
         <group>
@@ -92,8 +111,7 @@ function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged }) {
                     />
                 </mesh>
             ) : (
-                <mesh position={[centerX, centerY, centerZ]} receiveShadow castShadow>
-                    <cylinderGeometry args={[radius, radius, boxH, 64]} />
+                <mesh position={[centerX, centerY, centerZ]} receiveShadow castShadow geometry={roundedCylinderFallback}>
                     <meshStandardMaterial
                         color="#e5e7eb"
                         roughness={0.3}
@@ -127,8 +145,12 @@ function AIModel({ url, onLoaded }) {
 
             // Shift geometry so the bottom is exactly at Y=0 
             // and the object is centered on the X and Z axes.
-            geom.translate(-center.x, -min.y, -center.z);
-            geom.computeBoundingBox();
+            // BUGFIX: Check if already centered to avoid cumulative translation on remount
+            if (Math.abs(center.x) > 0.001 || Math.abs(min.y) > 0.001 || Math.abs(center.z) > 0.001) {
+                console.log("[STUDIO] Centering figurine geometry...");
+                geom.translate(-center.x, -min.y, -center.z);
+                geom.computeBoundingBox();
+            }
 
             if (onLoaded) {
                 onLoaded(geom.boundingBox, meshRef.current);
@@ -154,6 +176,7 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
     const [status, setStatus] = useState('processing');
     const [stlUrl, setStlUrl] = useState(null);
     const [modelData, setModelData] = useState({ bounds: null, mesh: null });
+    const [mergedGeometry, setMergedGeometry] = useState(null);
 
     useEffect(() => {
         if (status === 'completed' || status === 'failed') return;
@@ -179,8 +202,28 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
     }, [sessionId, status]);
 
     const handleFinalize = async () => {
+        if (!mergedGeometry) return;
         setIsProcessing(true);
         try {
+            // 1. Export merged geometry to STL
+            const exporter = new STLExporter();
+            const mesh = new THREE.Mesh(mergedGeometry, new THREE.MeshStandardMaterial());
+            const stlData = exporter.parse(mesh, { binary: true });
+
+            // 2. Upload final STL to R2
+            const formData = new FormData();
+            formData.append("file", new Blob([stlData], { type: "model/stl" }), "final_merged.stl");
+            formData.append("session_id", sessionId);
+            formData.append("asset_id", selectedConcept.id);
+
+            const uploadResp = await fetch(`${API_BASE_URL}/api/assets/upload-final`, {
+                method: "POST",
+                body: formData
+            });
+
+            if (!uploadResp.ok) throw new Error("Failed to upload final manifold mesh");
+
+            // 3. Trigger Slicer
             const resp = await fetch(`${API_BASE_URL}/api/slice`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -194,8 +237,6 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
 
             const result = await resp.json();
 
-            // Formula from TODO: (material_grams * 0.03) + 12 service + 5 shipping (est)
-            // But we'll let Checkout handle the subtotal display
             onNext({
                 sessionId: sessionId,
                 printEstimate: result.stats,
@@ -206,7 +247,6 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
             });
         } catch (err) {
             console.error("Finalization Error:", err);
-            // Fallback for demo stability
             onNext({
                 sessionId: sessionId,
                 printEstimate: { total_material_grams: 120, total_material_cost: 3.60, print_time_display: "9h 30m" },
@@ -280,7 +320,10 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
                                                     modelBounds={modelData.bounds}
                                                     line1={line1}
                                                     line2={line2}
-                                                    onMerged={() => setIsMerged(true)}
+                                                    onMerged={(geom) => {
+                                                        setMergedGeometry(geom);
+                                                        setIsMerged(true);
+                                                    }}
                                                 />
                                             )}
                                         </group>
