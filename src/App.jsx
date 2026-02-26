@@ -187,16 +187,16 @@ export default function App() {
     return (
         <div className="min-h-screen flex flex-col font-sans selection:bg-primary/30 selection:text-white">
             {/* Header / Stepper */}
-            <header className="glass sticky top-0 z-50 py-6 md:py-8 px-8 md:px-16 border-b border-white/[0.05]">
+            <header className="glass sticky top-0 z-50 py-6 md:py-8 px-4 sm:px-8 md:px-16 border-b border-slate-200">
                 <div className="max-w-7xl mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 md:w-12 md:h-12 gradient-bg rounded-xl md:rounded-2xl flex items-center justify-center glow-shadow rotate-3 hover:rotate-0 transition-transform duration-500">
-                            <Sparkles className="text-white w-5 h-5 md:w-7 md:h-7" />
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 gradient-bg rounded-xl md:rounded-2xl flex items-center justify-center glow-shadow rotate-3 hover:rotate-0 transition-transform duration-500">
+                            <Sparkles className="text-white w-4 h-4 sm:w-5 sm:h-5 md:w-7 md:h-7" />
                         </div>
-                        <h1 className="text-xl md:text-3xl font-black tracking-tighter gradient-text leading-none">3Dmemoreez</h1>
+                        <h1 className="text-lg sm:text-xl md:text-3xl font-black tracking-tighter gradient-text leading-none">3Dmemoreez</h1>
                     </div>
 
-                    <nav className="flex items-center gap-3 md:gap-6">
+                    <nav className="flex items-center gap-2 sm:gap-3 md:gap-6">
                         {STEPS.map((step, idx) => {
                             const isActive = idx === currentStep;
                             const isCompleted = idx < currentStep;
@@ -207,15 +207,15 @@ export default function App() {
                                     <button
                                         onClick={() => isClickable && setCurrentStep(idx)}
                                         disabled={!isClickable}
-                                        className={`flex items-center gap-2 md:gap-3 px-2 md:px-4 py-2 rounded-2xl transition-all duration-500 ${isActive ? 'bg-white/[0.05]' : ''} ${isClickable ? 'hover:bg-white/10 cursor-pointer' : 'cursor-default'}`}
+                                        className={`flex items-center gap-2 md:gap-3 px-2 md:px-4 py-2 rounded-2xl transition-all duration-500 ${isActive ? 'bg-slate-100' : ''} ${isClickable ? 'hover:bg-slate-50 cursor-pointer' : 'cursor-default'}`}
                                     >
-                                        <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold border-2 transition-all duration-700 ${isActive ? 'border-primary bg-primary shadow-[0_0_20px_rgba(139,92,246,0.5)] text-white scale-110' : isCompleted ? 'border-green-400/50 bg-green-400/20 text-green-400' : 'border-white/10 text-white/20'}`}>
+                                        <div className={`w-6 h-6 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-medium border-2 transition-all duration-700 ${isActive ? 'border-primary bg-primary shadow-sm text-white scale-110' : isCompleted ? 'border-green-500 bg-green-50 text-green-600' : 'border-slate-200 text-slate-400'}`}>
                                             {isCompleted ? '✓' : idx + 1}
                                         </div>
-                                        <span className={`hidden sm:inline font-bold text-[11px] md:text-xs uppercase tracking-[0.2em] ${isActive ? 'text-white' : 'text-white/20'}`}>{step.title}</span>
+                                        <span className={`hidden sm:inline font-medium text-[11px] md:text-xs tracking-wider ${isActive ? 'text-slate-900' : 'text-slate-400'}`}>{step.title}</span>
                                     </button>
                                     {idx < STEPS.length - 1 && (
-                                        <div className="mx-2 md:mx-4 w-4 md:w-8 h-[2px] bg-white/[0.03] rounded-full overflow-hidden">
+                                        <div className="mx-2 md:mx-4 w-4 md:w-8 h-[2px] bg-slate-200 rounded-full overflow-hidden">
                                             <div className={`h-full bg-primary transition-all duration-1000 ${isCompleted ? 'w-full' : 'w-0'}`} />
                                         </div>
                                     )}
@@ -230,7 +230,7 @@ export default function App() {
                                     window.location.href = '/';
                                 }
                             }}
-                            className="ml-4 p-2 md:px-4 md:py-2 rounded-xl border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white hover:bg-white/5 transition-all"
+                            className="ml-4 p-2 md:px-4 md:py-2 rounded-xl border border-slate-200 text-[10px] font-medium tracking-widest text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-all uppercase"
                         >
                             Reset
                         </button>
@@ -239,7 +239,7 @@ export default function App() {
             </header>
 
             {/* Main Content */}
-            <main className="flex-grow w-full flex flex-col items-center px-8 md:px-16 section-spacing">
+            <main className="flex-grow w-full flex flex-col items-center px-4 sm:px-8 md:px-16 section-spacing">
                 <div className="w-full max-w-6xl mx-auto">
                     <AnimatePresence mode="wait">
                         <motion.div
@@ -282,16 +282,16 @@ export default function App() {
                                 )}
                                 {currentStep === 4 && (
                                     <div className="w-full max-w-2xl mx-auto px-4 animate-fade-in text-center py-20">
-                                        <div className="w-24 h-24 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-8 border border-green-500/20 glow-shadow">
-                                            <Sparkles className="w-12 h-12 text-green-400" />
+                                        <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-8 border border-green-200 shadow-sm">
+                                            <Sparkles className="w-12 h-12 text-green-500" />
                                         </div>
-                                        <h2 className="text-5xl font-black mb-6 tracking-tighter italic text-white">Order <span className="text-green-400">Secured</span></h2>
-                                        <p className="text-white/60 text-lg md:text-xl font-light leading-relaxed mb-12">
+                                        <h2 className="text-5xl font-light mb-6 tracking-tight text-slate-800">Order <span className="text-green-500 font-medium">Secured</span></h2>
+                                        <p className="text-slate-500 text-lg md:text-xl font-light leading-relaxed mb-12">
                                             Your 3D blueprint has been transmitted to our slicing engine. We've sent a <strong>confirmation email</strong> to your inbox with your receipt. Production will begin shortly.
                                         </p>
                                         <button
                                             onClick={() => window.location.href = '/'}
-                                            className="px-8 py-4 bg-white/5 border border-white/10 rounded-full font-bold uppercase tracking-widest text-sm hover:bg-white/10 transition-colors"
+                                            className="px-8 py-4 bg-slate-900 text-white rounded-xl font-medium tracking-wide hover:bg-slate-800 transition-colors shadow-sm"
                                         >
                                             Return to Origin
                                         </button>
@@ -304,12 +304,12 @@ export default function App() {
             </main>
 
             {/* Footer */}
-            <footer className="py-12 md:py-20 text-center border-t border-white/[0.03] bg-white/[0.01]">
+            <footer className="py-12 md:py-20 text-center border-t border-slate-200 bg-slate-50">
                 <div className="flex items-center justify-center gap-2 mb-4 group cursor-default">
                     <Sparkles className="w-4 h-4 text-primary group-hover:rotate-12 transition-transform" />
-                    <span className="text-sm font-bold uppercase tracking-[0.4em] text-white/20">3Dmemoreez</span>
+                    <span className="text-sm font-medium tracking-widest text-slate-400">3Dmemoreez</span>
                 </div>
-                <p className="text-white/10 text-xs font-light tracking-widest">
+                <p className="text-slate-400 text-xs font-light tracking-wide">
                     &copy; 2026 • FROM SENTIMENT TO PHYSICAL FORM
                 </p>
             </footer>

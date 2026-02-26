@@ -3,76 +3,77 @@ import { motion } from 'framer-motion';
 
 export default function ConceptCardGrid({ concepts, onSelect, onBack }) {
     return (
-        <div className="w-full max-w-7xl mx-auto px-4">
-            <div className="text-center mb-16 md:mb-32">
+        <div className="w-full max-w-6xl mx-auto px-4 py-8 md:py-16">
+            <div className="text-center mb-16 md:mb-24">
                 <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
+                    initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.8 }}
                 >
-                    <h2 className="text-5xl md:text-7xl font-black mb-6 tracking-tighter italic">
-                        Choose Your <span className="gradient-text">Concept</span>
+                    <h2 className="text-4xl md:text-5xl font-light text-slate-800 mb-6 tracking-tight">
+                        Choose Your Concept
                     </h2>
-                    <p className="text-white/30 text-lg md:text-2xl font-light mb-12 tracking-wide">
-                        Select the artistic direction that resonates with your sentiment.
+                    <p className="text-slate-500 text-lg md:text-xl font-light mb-12 max-w-2xl mx-auto">
+                        Select the artistic direction that best resonates with your story.
                     </p>
                     <button
                         onClick={onBack}
-                        className="inline-flex items-center gap-3 text-white/30 hover:text-white transition-all px-12 py-5 rounded-full border border-white/5 hover:bg-white/5 group"
+                        className="inline-flex items-center gap-3 text-slate-500 hover:text-slate-900 transition-all px-8 py-3 rounded-xl border border-slate-200 hover:bg-slate-50 group bg-white shadow-sm"
                     >
-                        <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-                        <span className="text-xs font-black uppercase tracking-[0.3em]">Reverse Sentiment</span>
+                        <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                        <span className="text-sm font-medium tracking-wide">Revise Story</span>
                     </button>
                 </motion.div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 md:gap-32 mb-40">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 md:gap-20 mb-32">
                 {concepts.map((concept, idx) => (
                     <motion.div
                         key={concept.id}
-                        initial={{ opacity: 0, y: 40 }}
+                        initial={{ opacity: 0, y: 30 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
-                        transition={{ duration: 0.8, delay: idx * 0.2 }}
-                        className="group relative cursor-pointer"
+                        transition={{ duration: 0.6, delay: idx * 0.1 }}
+                        className="group relative cursor-pointer flex flex-col"
                         onClick={() => onSelect(concept)}
                     >
                         {/* Image Container */}
-                        <div className="aspect-[4/5] md:aspect-[3/4] overflow-hidden rounded-[2.5rem] md:rounded-[4rem] relative premium-input mb-8 md:mb-12">
+                        <div className="aspect-[4/5] object-cover rounded-3xl overflow-hidden relative shadow-sm border border-slate-100 mb-6 bg-slate-50">
                             <img
                                 src={concept.url}
                                 alt={concept.title}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000 ease-out"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                             />
-                            <div className="absolute inset-0 bg-gradient-to-t from-bg-dark via-transparent to-transparent opacity-80" />
+                            {/* We keep a subtle dark gradient overlay just so the white text on the image remains legible */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent opacity-90 transition-opacity group-hover:opacity-100" />
 
-                            {/* Overlay Info */}
-                            <div className="absolute bottom-8 left-8 right-8 md:bottom-12 md:left-12 md:right-12">
-                                <div className="flex items-center gap-4 mb-4">
-                                    <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.2em] ${concept.type === 'Literal' ? 'bg-blue-500 text-white shadow-[0_0_20px_rgba(59,130,246,0.5)]' : 'bg-purple-500 text-white shadow-[0_0_20px_rgba(168,85,247,0.5)]'}`}>
+                            {/* Overlay Info on Image */}
+                            <div className="absolute bottom-6 left-6 right-6 md:bottom-8 md:left-8 md:right-8">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wider text-white shadow-sm ${concept.type === 'Literal' ? 'bg-blue-500' : 'bg-purple-500'}`}>
                                         {concept.type}
                                     </span>
-                                    <div className="flex items-center gap-2 px-4 py-1 bg-black/40 backdrop-blur-md rounded-full border border-white/10">
+                                    <div className="flex items-center gap-1.5 px-3 py-1 bg-black/30 backdrop-blur-md rounded-full border border-white/20">
                                         <TrendingUp className="w-3 h-3 text-green-400" />
-                                        <span className="text-[10px] font-black text-white/80">{concept.score}% PRINTABLE</span>
+                                        <span className="text-[10px] font-bold text-white/90">{concept.score}% Printable</span>
                                     </div>
                                 </div>
-                                <h3 className="text-3xl md:text-5xl font-black text-white tracking-tighter group-hover:gradient-text transition-all duration-500">{concept.title}</h3>
+                                <h3 className="text-2xl md:text-3xl font-medium text-white tracking-tight leading-tight">{concept.title}</h3>
                             </div>
                         </div>
 
-                        {/* Description & Action */}
-                        <div className="px-8 md:px-12 flex flex-col md:flex-row md:items-end justify-between gap-8">
+                        {/* Description & Action (Below Image) */}
+                        <div className="px-2 flex flex-col md:flex-row md:items-start justify-between gap-6">
                             <div className="max-w-md">
-                                <p className="text-white/40 text-sm md:text-lg font-light leading-relaxed">
+                                <p className="text-slate-600 text-base font-light leading-relaxed">
                                     {concept.type === 'Literal'
                                         ? 'A precise, recognizable fusion of your story into a tangible geometry.'
-                                        : 'A fluid, evocative interpretation focusing on the emotional resonance.'}
+                                        : 'A fluid, evocative interpretation focusing on emotional resonance.'}
                                 </p>
                             </div>
-                            <div className="shrink-0">
-                                <span className="inline-flex items-center gap-2 text-primary font-black text-[10px] uppercase tracking-[0.4em] group-hover:gap-4 transition-all">
-                                    Initiate Blueprint
+                            <div className="shrink-0 flex items-center justify-end">
+                                <span className="inline-flex items-center gap-2 text-primary font-medium text-sm group-hover:gap-3 transition-all bg-primary/5 px-4 py-2 rounded-lg">
+                                    Select Concept
                                     <CheckCircle2 className="w-4 h-4" />
                                 </span>
                             </div>
@@ -81,13 +82,13 @@ export default function ConceptCardGrid({ concepts, onSelect, onBack }) {
                 ))}
             </div>
 
-            <div className="text-center py-24 glass rounded-[3rem] border-dashed border-2 border-white/5 mx-4">
-                <p className="text-white/20 mb-8 italic text-lg md:text-xl font-light">"Seeking a different resonance?"</p>
+            <div className="text-center py-16 bg-slate-50 rounded-3xl border border-slate-200 shadow-sm mx-auto max-w-2xl">
+                <p className="text-slate-500 mb-6 font-light text-lg">Looking for a different artistic direction?</p>
                 <button
                     onClick={onBack}
-                    className="text-white font-black uppercase tracking-[0.4em] text-xs hover:text-primary transition-all border-b border-white/10 pb-2"
+                    className="text-slate-800 font-medium hover:text-primary transition-colors border-b border-slate-300 hover:border-primary pb-1"
                 >
-                    Regenerate All Concepts
+                    Regenerate Alternative Concepts
                 </button>
             </div>
         </div>

@@ -320,7 +320,7 @@ Structure:
   ]
 }`;
 
-                const llamaResponse = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
+                const llamaResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
                     messages: [
                         { role: "system", content: systemPrompt },
                         { role: "user", content: `User Hobbies: ${hobbies.join(", ")}` }

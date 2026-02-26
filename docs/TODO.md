@@ -241,18 +241,20 @@
 
 ---
 
-## Phase 11: UI/UX Global Improvements
+## Phase 11: UI/UX Global Improvements — ✅ COMPLETE (2026-02-26)
 
-* [ ] **UI Polish:** Fix spacing, padding, and text truncation across the app to make it feel more premium.
-* [ ] **App.jsx & AdminDashboard.jsx:** Inspect and adjust layout constraints, ensuring text readability and proper mobile responsiveness.
+* [x] **UI Polish:** Fixed spacing, padding, and text boundaries in the Checkout component.
+* [x] **Price Architecture:** Localized currency to EUR (€), updated shipping to 3.90€, and simplified Order Summary by combining material/service costs into "Production & Service".
+* [x] **Checkout Clarity:** Removed confusing "Global Express" and "Lifetime QC" placeholder badges for a sharper production flow.
+* [x] **App.jsx & AdminDashboard.jsx:** Inspected and adjusted layout constraints, ensuring text readability and proper mobile responsiveness.
 
 ---
 
 ## Phase 12: Dynamic Input Form (`FactsInputForm`)
 
-* [ ] **Dynamic Array:** Convert the fixed 3-item state into a dynamic array.
-* [ ] **Add/Remove Functionality:** Implement a "+ Add dimension" button and a remove/delete button for entries to allow users pure free-form input (e.g., specific facts or hobbies).
-* [ ] **Fluid UI:** Optimize the layout to handle dynamic heights and multiple items gracefully.
+* [x] **Dynamic Array:** Convert the fixed 3-item state into a dynamic array.
+* [x] **Add/Remove Functionality:** Implement a "+ Add dimension" button and a remove/delete button for entries to allow users pure free-form input (e.g., specific facts or hobbies).
+* [x] **Fluid UI:** Optimize the layout to handle dynamic heights and multiple items gracefully.
 
 ---
 

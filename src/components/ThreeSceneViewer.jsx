@@ -104,9 +104,9 @@ function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged }) {
 
             {isGenerating && (
                 <Html position={[centerX, centerY + boxH / 2 + 0.2, centerZ]}>
-                    <div className="flex items-center gap-2 bg-black/80 px-3 py-1 rounded-full border border-white/10 whitespace-nowrap">
+                    <div className="flex items-center gap-2 bg-white/90 px-3 py-1 rounded-full border border-slate-200 shadow-sm whitespace-nowrap">
                         <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                        <span className="text-[10px] font-bold text-white/80 tracking-widest italic">Engraving...</span>
+                        <span className="text-[10px] font-medium text-slate-600 tracking-widest italic">Engraving...</span>
                     </div>
                 </Html>
             )}
@@ -229,31 +229,31 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
     }, [selectedConcept?.id]);
 
     return (
-        <div className="w-full max-w-7xl mx-auto px-4 animate-fade-in">
-            <div className="flex flex-col gap-12">
+        <div className="w-full max-w-7xl mx-auto px-4 animate-fade-in py-8">
+            <div className="flex flex-col gap-8 md:gap-12">
                 <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="text-center md:text-left">
-                        <span className="text-[10px] font-black uppercase tracking-[0.5em] text-white/20 mb-3 block">Stage 03 • 3D Studio</span>
-                        <h2 className="text-4xl md:text-5xl font-black tracking-tighter italic">{selectedConcept?.title}</h2>
+                        <span className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400 mb-2 block">Stage 03 • 3D Studio</span>
+                        <h2 className="text-3xl md:text-5xl font-light tracking-tight text-slate-800">{selectedConcept?.title}</h2>
                     </div>
                     <button
                         onClick={onBack}
-                        className="inline-flex items-center gap-3 text-white/30 hover:text-white transition-all px-8 py-4 rounded-full border border-white/5 hover:bg-white/5 group"
+                        className="inline-flex items-center gap-3 text-slate-500 hover:text-slate-900 transition-all px-6 py-3 rounded-xl border border-slate-200 hover:bg-slate-50 shadow-sm group bg-white"
                     >
                         <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.3em]">Back to Concepts</span>
+                        <span className="text-xs font-medium uppercase tracking-widest">Back to Concepts</span>
                     </button>
                 </div>
 
                 <div className="relative group">
-                    <div className="h-[600px] md:h-[750px] rounded-[3rem] md:rounded-[4rem] bg-[#07090d] border border-white/5 overflow-hidden shadow-2xl relative">
+                    <div className="h-[500px] md:h-[650px] rounded-3xl bg-slate-50 border border-slate-200 overflow-hidden shadow-inner relative">
                         <Canvas shadows gl={{ antialias: true, alpha: true }}>
                             <PerspectiveCamera makeDefault position={[5, 5, 5]} fov={35} />
-                            <color attach="background" args={['#07090d']} />
+                            <color attach="background" args={['#f8fafc']} />
 
-                            <ambientLight intensity={0.4} />
-                            <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={2} castShadow />
-                            <pointLight position={[-10, -10, -10]} intensity={1} color="#8b5cf6" />
+                            <ambientLight intensity={0.5} />
+                            <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1.5} castShadow />
+                            <pointLight position={[-10, -10, -10]} intensity={0.5} color="#8b5cf6" />
 
                             <Suspense fallback={null}>
                                 <Stage
@@ -297,58 +297,58 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, onNext, o
                         </Canvas>
 
                         {status === 'processing' && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-10">
-                                <div className="flex flex-col items-center gap-6 p-12 glass rounded-[3rem] border border-white/10">
+                            <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm z-10">
+                                <div className="flex flex-col items-center gap-6 p-10 bg-white/90 rounded-3xl border border-slate-200 shadow-xl">
                                     <div className="relative">
-                                        <div className="w-20 h-20 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-                                        <Loader2 className="absolute inset-0 m-auto w-8 h-8 text-primary animate-pulse" />
+                                        <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+                                        <Loader2 className="absolute inset-0 m-auto w-6 h-6 text-primary animate-pulse" />
                                     </div>
-                                    <h3 className="text-xl font-black tracking-widest uppercase">Crystallizing...</h3>
+                                    <h3 className="text-lg font-medium tracking-wide text-slate-800">Crystallizing Blueprint...</h3>
                                 </div>
                             </div>
                         )}
 
-                        <div className="absolute top-10 right-10 w-full max-w-[280px]">
-                            <div className="glass p-8 rounded-[2.5rem] border border-white/10 backdrop-blur-2xl">
-                                <label className="flex items-center gap-2 text-[10px] font-black text-white/30 uppercase tracking-[0.3em] mb-4">
+                        <div className="absolute top-8 right-8 w-full max-w-[280px]">
+                            <div className="bg-white/80 p-6 rounded-2xl border border-slate-200 shadow-sm backdrop-blur-xl">
+                                <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-4">
                                     <Type className="w-3 h-3" />
-                                    Engraving
+                                    Pedestal Engraving
                                 </label>
                                 <input
                                     type="text"
                                     value={line1}
                                     onChange={(e) => setLine1(e.target.value)}
                                     placeholder="LINE 1"
-                                    className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-4 text-sm font-black text-white placeholder-white/5 focus:outline-none focus:border-primary tracking-widest transition-all mb-4"
+                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all mb-3 shadow-sm"
                                 />
                                 <input
                                     type="text"
                                     value={line2}
                                     onChange={(e) => setLine2(e.target.value)}
                                     placeholder="LINE 2"
-                                    className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-4 text-sm font-black text-white placeholder-white/5 focus:outline-none focus:border-primary tracking-widest transition-all"
+                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all shadow-sm"
                                 />
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex flex-col items-center gap-8 pt-8">
+                <div className="flex flex-col items-center gap-6 pt-6">
                     <motion.button
                         onClick={handleFinalize}
                         disabled={isProcessing || status !== 'completed'}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        className={`px-20 py-8 rounded-full font-black text-xl transition-all duration-700 ${isProcessing || status !== 'completed'
-                            ? 'bg-white/5 text-white/10 cursor-not-allowed'
-                            : 'bg-white text-black tracking-[0.4em] uppercase shadow-[0_20px_60px_rgba(255,255,255,0.15)]'
+                        className={`px-16 py-5 rounded-xl font-medium text-lg transition-all shadow-sm ${isProcessing || status !== 'completed'
+                            ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                            : 'bg-slate-900 text-white hover:bg-slate-800 hover:shadow-md'
                             }`}
                     >
-                        Finalize Print
+                        {isProcessing ? 'Slicing Geometry...' : 'Finalize Print'}
                     </motion.button>
                     <button
                         onClick={onBack}
-                        className="text-white/20 hover:text-white/50 text-[10px] font-black uppercase tracking-[0.4em] transition-all"
+                        className="text-slate-400 hover:text-slate-600 text-xs font-medium tracking-wide transition-all underline decoration-slate-200 underline-offset-4"
                     >
                         Adjust Blueprint Sentiment
                     </button>

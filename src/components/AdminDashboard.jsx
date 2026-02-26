@@ -144,7 +144,7 @@ export default function AdminDashboard() {
                         <Package className="text-primary w-6 h-6" />
                         <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Command Center</span>
                     </div>
-                    <h1 className="text-5xl font-black italic tracking-tighter">Order <span className="gradient-text">Fulfillment</span></h1>
+                    <h1 className="text-4xl md:text-5xl font-black italic tracking-tighter">Order <span className="gradient-text">Fulfillment</span></h1>
                 </div>
 
                 <div className="relative group">
@@ -180,7 +180,7 @@ export default function AdminDashboard() {
                                 className="glass rounded-3xl overflow-hidden border border-white/10 group hover:border-white/20 transition-all flex flex-col lg:flex-row"
                             >
                                 {/* Reference Image Area */}
-                                <div className="lg:w-48 xl:w-64 bg-white/5 relative overflow-hidden">
+                                <div className="lg:w-48 xl:w-64 bg-white/5 relative overflow-hidden aspect-[4/3] sm:aspect-[16/9] lg:aspect-auto">
                                     <img
                                         src={order.image_url.startsWith('http') ? order.image_url : `${API_BASE_URL}${order.image_url}`}
                                         alt="Concept"
@@ -194,7 +194,7 @@ export default function AdminDashboard() {
                                 </div>
 
                                 {/* Content Area */}
-                                <div className="flex-grow p-8 flex flex-col lg:flex-row justify-between gap-8">
+                                <div className="flex-grow p-5 sm:p-8 flex flex-col lg:flex-row justify-between gap-8">
                                     <div className="space-y-4">
                                         <div>
                                             <span className="text-[10px] font-black uppercase tracking-widest text-white/20">Manifest ID</span>
@@ -205,11 +205,11 @@ export default function AdminDashboard() {
                                             <div>
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-white/20">Customer</span>
                                                 <p className="font-bold">{order.receiver_first_name} {order.receiver_last_name}</p>
-                                                <p className="text-white/40 text-xs">{order.user_email}</p>
+                                                <p className="text-white/40 text-xs truncate sm:break-all">{order.user_email}</p>
                                             </div>
                                             <div>
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-white/20">Shipping Destination</span>
-                                                <p className="text-xs text-white/60 leading-relaxed max-w-[200px]">{order.shipping_address}</p>
+                                                <p className="text-xs text-white/60 leading-relaxed max-w-full lg:max-w-[200px]">{order.shipping_address}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -239,7 +239,7 @@ export default function AdminDashboard() {
                                         {order.status === 'paid' ? (
                                             <button
                                                 onClick={() => markAsShipped(order.id)}
-                                                className="w-full sm:w-auto px-8 py-5 gradient-bg rounded-2xl flex items-center justify-center gap-3 font-black uppercase tracking-widest text-xs glow-shadow-primary hover:scale-[1.02] active:scale-[0.98] transition-all"
+                                                className="w-full sm:w-auto px-8 py-4 gradient-bg rounded-2xl flex items-center justify-center gap-3 font-black uppercase tracking-widest text-xs glow-shadow-primary hover:scale-[1.02] active:scale-[0.98] transition-all"
                                             >
                                                 <Truck className="w-4 h-4" /> SHIP MANIFEST
                                             </button>
