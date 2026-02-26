@@ -204,16 +204,9 @@
     * [x] Mock data objects
     * [x] MSW mock server
     * [x] Sample test files
-* [x] **Documentation:**
-    * [x] Comprehensive testing guide
-    * [x] Quick start guide
-    * [x] Testing architecture diagrams
-    * [x] Practical examples
-    * [x] New feature checklist
-
-**Test Coverage:** ~50% (target: 80%+)
-**Test Execution Time:** ~4 minutes (target: < 6 minutes)
-**Documentation:** 8 comprehensive guides created
+* [x] **Documentation:** Comprehensive testing guide, architecture diagrams.
+* [ ] **CI/CD Refinement:** Configure GitHub Actions to run the full test suite on every push.
+* [ ] **E2E Testing Strategy:** Implement a "Simulation Mode" for E2E tests to bypass expensive remote GPU/Slicer calls using pre-recorded mock binaries (STLs/G-codes) to ensure GitHub tests stay fast and free.
 
 ---
 
@@ -260,14 +253,15 @@
 
 ## Phase 13: 3D Printability Prompt Optimization
 
-* [ ] **Prompt Engineering:** Update the Llama 3 system prompt in `backend/src/index.js`.
-* [ ] **Enforce Constraints:** Explicitly require thick, chunky, monolithic shapes and add strict negative constraints against fragile or thin details.
-* [ ] **Testing:** Verify Flux outputs to ensure the AI creates a sturdy 3D-printable structure rather than a delicate scene.
+* [ ] **Single Object Enforcement:** Update Llama 3 system prompt to strictly forbid scenes, backgrounds, or multiple objects.
+* [ ] **Monochrome Logic:** Force prompts to specify "Solid Matte Gray PLA" and "Studio High-Key Lighting" to avoid color artifacts.
+* [ ] **Structural Primitives:** Add instructions to prioritize "chunky, monolithic" volumes that are easier for Hunyuan3D to interpret.
 
 ---
 
-## Phase 14: CSG Pedestal Overlap Adjustments
+## Phase 14: CSG Pedestal & UX Refinements
 
-* [ ] **Vertical Offset:** Adjust the `centerY` overlap calculation in `ThreeSceneViewer.jsx` (currently `0.1`) to something shallower like `0.02` or `0.05`.
-* [ ] **`csgEngine.js` Synchronization:** Ensure the backend CSG engine uses the same adjusted overlay offset so the STL matches the preview.
-* [ ] **Visual Verification:** Check the 3D Studio step to visually confirm the model sits higher on the pedestal.
+* [ ] **Safety Rounding:** Modify the pedestal geometry to round off sharp corners (Fillet/Rounded corners) for a more premium, safe feel.
+* [ ] **Engraving UX (Lag Fix):** Implement debouncing (300ms) for the real-time engraving updates to prevent UI hanging while the user types.
+* [ ] **Visual Feedback:** Add a subtle "Engraving..." status or spinner when the 3D model is regenerating its geometry.
+* [ ] **Vertical Offset:** Adjust the `centerY` overlap calculation to something shallower like `0.02` or `0.05` for a cleaner merge.
