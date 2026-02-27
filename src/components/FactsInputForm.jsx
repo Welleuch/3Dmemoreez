@@ -143,7 +143,7 @@ export default function FactsInputForm({ onSubmit, isGenerating, initialData }) 
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5, delay: 0.2 }}
-                className="w-full bg-white/60 backdrop-blur-2xl rounded-[2rem] border border-slate-200 shadow-md flex flex-col h-[65vh] min-h-[500px] max-h-[750px] overflow-hidden"
+                className="w-full bg-white/60 backdrop-blur-2xl rounded-[2rem] border border-slate-200 shadow-md flex flex-col h-[80vh] min-h-[600px] max-h-[850px] overflow-hidden"
             >
                 {/* Messages Area - flex-grow ensures this wrapper expands, and its children scroll */}
                 <div className="flex-grow overflow-y-auto overflow-x-hidden p-6 md:p-8 space-y-8 scroll-smooth will-change-scroll custom-scrollbar">
