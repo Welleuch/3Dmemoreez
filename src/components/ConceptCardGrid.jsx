@@ -13,16 +13,9 @@ export default function ConceptCardGrid({ concepts, onSelect, onBack }) {
                     <h2 className="text-4xl md:text-5xl font-light text-slate-800 mb-6 tracking-tight">
                         Choose Your Concept
                     </h2>
-                    <p className="text-slate-500 text-lg md:text-xl font-light mb-12 max-w-2xl mx-auto">
+                    <p className="text-slate-500 text-lg md:text-xl font-light max-w-2xl mx-auto">
                         Select the artistic direction that best resonates with your story.
                     </p>
-                    <button
-                        onClick={onBack}
-                        className="inline-flex items-center gap-3 text-slate-500 hover:text-slate-900 transition-all px-8 py-3 rounded-xl border border-slate-200 hover:bg-slate-50 group bg-white shadow-sm"
-                    >
-                        <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                        <span className="text-sm font-medium tracking-wide">Revise Story</span>
-                    </button>
                 </motion.div>
             </div>
 
