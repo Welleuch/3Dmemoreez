@@ -1,6 +1,6 @@
 # 3Dmemoreez — System Architecture Map
 
-> Last updated: 2026-02-26
+> Last updated: 2026-02-27 (Post-Phase 17)
 
 ---
 
@@ -14,8 +14,9 @@
 [Cloudflare Worker] ──────────────────────────────────────────────
    │  • Cloudflare AI: Llama-3 (system prompt → DfAM-compliant image prompts)
    │  • Cloudflare AI: Flux Schnell × 4 (image generation)
-   │  • Stores 4 images in R2
-   │  • Stores 4 asset rows in D1 (status: 'generated')
+   │  • Stores images in R2
+   │  • Stores asset rows in D1 (status: 'generated')
+   │  • Supports Concept Appending: Multiple `/api/generate` calls allowed per session.
    │  • Returns concept list to browser
    │
    │  POST /api/session/select (user picks an image)

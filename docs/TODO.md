@@ -293,6 +293,15 @@
 
 ---
 
+## Phase 20: Smart Concept Exploration — ✅ COMPLETE (2026-02-27)
+
+* [x] **Incremental Generation:** Implemented `handleGenerateMore` in `App.jsx` to fetch additional concept variations without resetting the session.
+* [x] **State Persistence:** Updated concept state to use an append logic (`prev => [...prev, ...newConcepts]`), allowing infinite exploration of artistic directions.
+* [x] **Dual-Path Navigation:** Overhauled `ConceptCardGrid` footer with two dedicated actions: "Revise Story" (back to chat) and "Explore More Concepts" (on-page expansion).
+* [x] **Stealth Scrolling:** Optimized `FactsInputForm` with an invisible-on-rest custom scrollbar and forced 80vh height for a more expansive, premium feel.
+
+---
+
 ## Phase 18: Flux Image Generation Consistency
 
 * [ ] **Investigate First Run Leaks:** Analyze why the first attempt at generating images often includes leaks (e.g., backgrounds, colors, breaking constraints) while subsequent "Regenerate" clicks work perfectly.
