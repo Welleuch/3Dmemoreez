@@ -282,3 +282,25 @@
 * [x] **Instant Finalize:** Clicking "Finalize Print" after viewing the model for > 30 seconds results in an *instant* transition to Checkout, hiding the entire compute wait time.
 * [x] **Dynamic Loading Modal:** Built a beautiful, dynamic React `Printer` modal that displays accurate backend status (`UPLOADING`, `SLICING`, `POLLING`) and progressive a load bar if the user clicks Finalize before the background job finishes.
 * [x] **Unified Loading UX:** Upgraded the Step 3 (Mesh Generation) loading state to match the premium slicing aesthetic, including dynamic progress bars, engaging narrative text, and glassmorphism UI elements.
+
+---
+
+## Phase 17: Landing Page Chat UX Refinement
+
+* [ ] **Fix Session Recovery UI:** Remove the redundant "Subject: Recovered... Story: Subject: ..." text when navigating back/recovering a session to eliminate scrolling issues and visual clutter.
+* [ ] **Remove Confirmation Step:** Eliminate the AI's final "Got it! Feel free to crystallize..." message.
+* [ ] **Auto-Launch Generation:** Automatically trigger the "Crystallize Data" (image generation) action as soon as the user submits their second input (hobbies/facts), removing the need for a final manual button click.
+
+---
+
+## Phase 18: Flux Image Generation Consistency
+
+* [ ] **Investigate First Run Leaks:** Analyze why the first attempt at generating images often includes leaks (e.g., backgrounds, colors, breaking constraints) while subsequent "Regenerate" clicks work perfectly.
+* [ ] **Apply Fix:** Adjust the prompt payload, seed management, or Worker logic for the very first `/api/generate` call to ensure it adheres to the strict monochrome/clay constraints as effectively as regeneration does.
+
+---
+
+## Phase 19: RunPod Mesh Generation Cold-Start Optimization
+
+* [ ] **Pre-trigger / Warm-up Endpoint:** Implement a mechanism to wake up the RunPod Mesh Generation GPU endpoint *during* the image generation or selection phase.
+* [ ] **Eliminate Cold Starts:** Ensure that by the time the user selects a concept image and triggers the mesh generation, the RunPod container is already active and ready for inference, significantly reducing perceived wait times.
