@@ -157,14 +157,14 @@
 * [x] **R2 storage:** Store G-code in R2 under `gcode___SESSION___ASSET.gcode`
 * [x] **Scaling Verification:** Confirmed cold-starts are instant as all extraction is done during build.
 
-## Phase 6: Production Deployment — Slicer (Cloudflare Containers)
+## Phase 6: Production Deployment — Slicer (RunPod Serverless) — ✅ COMPLETE (2026-02-27)
 
-> Decision rationale: Slicer is CPU-only (~30s), co-located with CF Worker (service binding, no public URL), cheaper than RunPod for CPU work ($0.0012/slice).
+> Decision rationale: Due to Cloudflare Worker's strict 30-second execution limit for synchronous HTTP requests, the 30.5-second Slicing process was timing out. We transitioned the CPU-heavy PrusaSlicer container to RunPod Serverless `/run` (Async) endpoints to bypass timeouts.
 
-* [ ] **Push slicer Docker image** to registry
-* [ ] **Cloudflare Containers config** in `wrangler.toml`
-* [ ] **Service binding** in Worker: call slicer container directly without HTTP round-trip
-* [ ] **Replace localtunnel slicer:** Update Worker to use container binding instead of `localhost:8001`
+* [x] **Push slicer Docker image** to RunPod Container Registry
+* [x] **RunPod Serverless config:** Deployed PrusaSlicer API to a GPU/CPU serverless endpoint
+* [x] **Asynchronous Execution:** Worker calls `/api/slice` → RunPod `/run` endpoint (returns job_id instantly)
+* [x] **Frontend Polling Architecture:** Built `/api/slice/status` orchestrator route. Frontend polls every 3s until job completes and G-code is uploaded to R2.
 
 ## Phase 7: Admin Dashboard + Fulfillment
 
@@ -273,3 +273,11 @@
 * [x] **Vertical Offset:** Adjusted `centerY` overlap to `0.05` for a structurally sound but clean merge.
 * [x] **CSG Stability:** Implemented geometry normalization (`toNonIndexed`) and attribute filtering (position/normal only) to prevent browser crashes during merge.
 * [x] **Persistence & Dual-Path Storage:** Separated Raw Character and Final Manifold model paths in D1/R2. Lifted engraving state to App component to ensure text survives navigation (back-and-forth) between Studio and Checkout.
+
+---
+
+## Phase 16: Zero-Wait UX Optimizations — ✅ COMPLETE (2026-02-27)
+
+* [x] **Background Pre-Slicing:** Re-engineered `ThreeSceneViewer` to silently trigger the 30-second Slicing job in the background as soon as the Studio loads (with a 1.5s debounce).
+* [x] **Instant Finalize:** Clicking "Finalize Print" after viewing the model for > 30 seconds results in an *instant* transition to Checkout, hiding the entire compute wait time.
+* [x] **Dynamic Loading Modal:** Built a beautiful, dynamic React `Printer` modal that displays accurate backend status (`UPLOADING`, `SLICING`, `POLLING`) and progressive a load bar if the user clicks Finalize before the background job finishes.

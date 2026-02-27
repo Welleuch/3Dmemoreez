@@ -240,13 +240,13 @@ Start here if you're new to the project:
 |----------|--------------|--------|
 | README.md | 2026-02-23 | ✅ Current |
 | PROJECT_OVERVIEW.md | 2026-02-23 | ✅ Current |
-| INDEX.md | 2026-02-23 | ✅ Current |
-| ARCHITECTURE.md | 2026-02-21 | ✅ Current |
+| INDEX.md | 2026-02-27 | ✅ Current |
+| ARCHITECTURE.md | 2026-02-27 | ✅ Current |
 | specification.md | 2026-02-23 | ✅ Current |
 | ai_engine.md | 2026-02-21 | ✅ Current |
 | ENGRAVING_SPEC.md | 2026-02-21 | ✅ Current |
 | SESSION_STATE.md | 2026-02-23 | ✅ Current |
-| TODO.md | 2026-02-23 | ✅ Current |
+| TODO.md | 2026-02-27 | ✅ Current |
 | TROUBLESHOOTING.md | 2026-02-21 | ✅ Current |
 | TESTING.md | 2026-02-23 | ✅ Current |
 | TESTING_ARCHITECTURE.md | 2026-02-23 | ✅ Current |
@@ -262,4 +262,4 @@ Start here if you're new to the project:
 
 ---
 
-**Last updated:** 2026-02-23
+**Last updated:** 2026-02-27

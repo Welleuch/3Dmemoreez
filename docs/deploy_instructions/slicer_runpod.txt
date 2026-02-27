@@ -1,0 +1,15 @@
+# Please generate a comprehensive guide on deploying my PrusaSlicer Docker image to a RunPod CPU Serverless endpoint.
+
+Here is some context about my application and what I want to achieve:
+
+- **Goal:** Run my PrusaSlicer-based G-code generator on a CPU Serverless Endpoint via RunPod so that my frontend doesn't rely on my local docker container (`lochost:8001`) anymore.
+- **Docker Image Detail:** The `3dmemoreez-slicer:optimized` image (~1.2GB) is an Ubuntu 22.04 headless environment running PrusaSlicer 2.8.1 via a FastAPI wrapper on port `8001`. It extracts an AppImage securely at build-time.
+- **API Spec Details:** The service currently listens for POST requests to `/slice` and handles file uploads (`.stl` files), then returns JSON statistics (material grams, print time) and the location of a `.gcode` file.
+
+Please lay out a step-by-step guide on:
+1. Pushing the Docker image `3dmemoreez-slicer:optimized` to an accessible registry (e.g., Docker Hub).
+2. Creating the RunPod Serverless CPU endpoint (instance configuration, idle wait, minimum/maximum scale).
+3. Adapting the endpoint payload format. Currently, the local server accepts purely `multipart/form-data` file uploads. Does RunPod Serverless handle raw binary HTTP, or do I need to send the STL file as a base64 string within the `input` JSON payload?
+4. How to link the final generated RunPod URL back to my current Cloudflare Worker architecture.
+
+Refer to my notes in `docs/TODO.md` Phase 4b and `docs/ARCHITECTURE.md` for understanding the slicing pipeline. Output strictly actionable steps.

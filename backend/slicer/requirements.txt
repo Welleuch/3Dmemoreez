@@ -3,3 +3,5 @@ uvicorn
 python-multipart
 requests
 trimesh
+runpod
+numpy

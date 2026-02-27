@@ -1,0 +1,66 @@
+# Cloudflare Pages Deployment Guide for 3Dmemoreez Frontend
+
+This guide documents the comprehensive steps required to deploy the React (Vite) frontend application of `3Dmemoreez` to Cloudflare Pages.
+
+## 1. Prerequisites and Project Preparation
+Before deploying, ensure your project is pushed to a Git repository (e.g., GitHub or GitLab). Cloudflare Pages connects directly to your repository to enable continuous deployment.
+
+1. Verify your build script in `package.json` is set to `"build": "vite build"`.
+2. Ensure you have no uncommitted changes.
+3. Push your code to your remote repository (e.g., GitHub):
+   ```bash
+   git add .
+   git commit -m "Prepare for Cloudflare Pages deployment"
+   git push origin main
+   ```
+
+## 2. Connect Your Repository to Cloudflare Pages
+1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com).
+2. On the left sidebar menu, select **Workers & Pages**.
+3. Click the **Create application** button, then switch to the **Pages** tab.
+4. Click **Connect to Git**.
+5. Choose your Git provider (e.g., GitHub), authenticate if necessary, and select the `3Dmemoreez` repository from the list.
+6. Click **Begin setup**.
+
+## 3. Configure Build Settings
+You will now configure how Cloudflare builds your Vite application. Fill out the "Set up builds and deployments" form with the following values:
+
+- **Project name**: Choose a name (e.g., `3dmemoreez`). This will become part of your default URL (e.g., `https://3dmemoreez.pages.dev`).
+- **Production branch**: `main` (or whatever your primary branch is named).
+- **Framework preset**: Select **Vite** from the dropdown menu. Cloudflare should automatically populate the fields below:
+  - **Build command**: `npm run build`
+  - **Build output directory**: `dist`
+  - **Root directory**: `/` (Leave this blank or as default unless your `package.json` is in a subfolder).
+
+### Environment Variables
+If your frontend relies on environment variables (like a URL pointing to your backend worker), you must add them here under **Environment variables (advanced)**.
+For example, if you use an env variable for your backend URL:
+- **Variable name**: `VITE_API_URL`
+- **Value**: `https://3d-memoreez-orchestrator.walid-elleuch.workers.dev`
+
+*(Note: If the backend URL is currently hardcoded in your `src` files, consider moving it to an environment variable or ensure it's pointing to the remote worker instead of a `localhost` URL).*
+
+## 4. Deploy the Application
+1. Click the **Save and Deploy** button.
+2. Cloudflare will initialize the build environment, clone your repository, run `npm run build`, and deploy the contents of the `dist` folder.
+3. Wait for the build logs to finish. Once successful, you will see a success message with your new Pages URL (e.g., `https://3dmemoreez.pages.dev`).
+4. Click the link to open your live application.
+
+## 5. CRITICAL: Update Backend Worker CORS Settings
+Now that your frontend runs on a Cloudflare Pages domain (instead of `http://localhost:5173`), your Cloudflare Worker backend will likely block requests due to CORS (Cross-Origin Resource Sharing).
+
+1. Open your Cloudflare Worker code (`3d-memoreez-orchestrator`).
+2. Update the CORS configuration to include your new frontend URL. Change it from allowing `localhost` to allowing `https://your-project-name.pages.dev` (or explicitly allow `*` during initial testing).
+3. If using Stripe redirects (`success_url` / `cancel_url`), ensure those URLs in the Worker are updated from `http://localhost:5173/...` to your new production `https://your-project-name.pages.dev/...`
+4. Redeploy the Worker.
+
+## 6. How to Push Updates
+Cloudflare Pages is fully integrated with your Git repository. To update your live application in the future:
+1. Make changes to your code locally.
+2. Commit and push those changes to your repository:
+   ```bash
+   git add .
+   git commit -m "Update frontend feature"
+   git push origin main
+   ```
+3. Cloudflare Pages will automatically detect the new commit, queue a new build, and deploy your updates within minutes without any manual intervention.

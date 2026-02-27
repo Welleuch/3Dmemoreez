@@ -162,7 +162,6 @@ export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
 
-        // CORS headers
         const corsHeaders = {
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -171,6 +170,13 @@ export default {
 
         if (request.method === "OPTIONS") {
             return new Response(null, { headers: corsHeaders });
+        }
+
+        // --- GLOBAL REQUEST LOGGER ---
+        console.log(`[REQUEST] ${request.method} ${url.pathname}`);
+        if (request.method === "POST" && !url.pathname.includes("/api/assets/")) {
+            // We can't log the body easily here without consuming it, 
+            // but we can log that a POST arrived.
         }
 
         try {
@@ -225,41 +231,6 @@ export default {
                 return new Response(object.body, { headers });
             }
 
-            // 2.1 Get Session Status (for Frontend Recovery)
-            if (url.pathname === "/api/session/status" && request.method === "GET") {
-                const sessionId = url.searchParams.get("session_id");
-                if (!sessionId) {
-                    return new Response(JSON.stringify({ error: "No session_id provided" }), {
-                        status: 400,
-                        headers: { ...corsHeaders, "Content-Type": "application/json" }
-                    });
-                }
-
-                const session = await env.DB.prepare(
-                    "SELECT * FROM Sessions WHERE id = ?"
-                ).bind(sessionId).first();
-
-                if (!session) {
-                    return new Response(JSON.stringify({ error: "Session not found" }), {
-                        status: 404,
-                        headers: { ...corsHeaders, "Content-Type": "application/json" }
-                    });
-                }
-
-                const assets = await env.DB.prepare(
-                    "SELECT * FROM Assets WHERE session_id = ?"
-                ).bind(sessionId).all();
-
-                return new Response(JSON.stringify({
-                    session: {
-                        ...session,
-                        hobbies: JSON.parse(session.hobbies_json || "[]")
-                    },
-                    assets: assets.results
-                }), {
-                    headers: { ...corsHeaders, "Content-Type": "application/json" },
-                });
-            }
 
             // 3. AI Generation (Llama + Flux)
             if (url.pathname === "/api/generate" && request.method === "POST") {
@@ -468,39 +439,66 @@ Structure:
                     "UPDATE Assets SET status = 'processing' WHERE session_id = ? AND image_url LIKE ?"
                 ).bind(session_id, `%${concept_id}%`).run();
 
-                const AI_ENGINE_URL = env.RUNPOD_ENDPOINT_URL || env.AI_ENGINE_URL || "http://127.0.0.1:8000/generate-3d";
-                // When running locally on Windows with Docker, the AI engine container 
-                // needs to reach the worker on the host. Use host.docker.internal.
+                let AI_ENGINE_URL = env.RUNPOD_ENDPOINT_URL || env.AI_ENGINE_URL;
+
+                // Fallback: If only Endpoint ID is provided, construct the RunPod URL
+                if (!AI_ENGINE_URL && env.RUNPOD_ENDPOINT_ID) {
+                    AI_ENGINE_URL = `https://api.runpod.ai/v2/${env.RUNPOD_ENDPOINT_ID}/run`;
+                }
+
+                // Final legacy fallback
+                AI_ENGINE_URL = AI_ENGINE_URL || "http://127.0.0.1:8000/generate-3d";
+
                 const origin = url.origin.includes('localhost') || url.origin.includes('127.0.0.1')
                     ? 'http://host.docker.internal:8787'
                     : url.origin;
                 const WEBHOOK_URL = `${origin}/api/webhook/runpod`;
 
+                console.log(`[AI-ENGINE] Target URL: ${AI_ENGINE_URL}`);
+                console.log(`[AI-ENGINE] Webhook URL: ${WEBHOOK_URL}`);
+
                 // Trigger 3D Engine
                 try {
-                    console.log("[AI-ENGINE] Triggering:", AI_ENGINE_URL);
-                    console.log("[AI-ENGINE] Webhook:", WEBHOOK_URL);
-                    const aiPromise = fetch(AI_ENGINE_URL, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "bypass-tunnel-reminder": "true",
-                            "x-tunnel-skip-interstitial": "true",
-                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                        },
-                        body: JSON.stringify({
+                    const IS_RUNPOD = AI_ENGINE_URL.includes("api.runpod.ai");
+
+                    // RunPod Serverless expects payload wrapped in "input"
+                    const payload = IS_RUNPOD ? {
+                        input: {
                             image_url: image_url.startsWith('http') ? image_url : `${url.origin}${image_url}`,
                             webhook_url: WEBHOOK_URL,
                             session_id: session_id,
                             asset_id: concept_id
-                        }),
-                        signal: AbortSignal.timeout(60000) // 60s timeout for the trigger call
+                        }
+                    } : {
+                        image_url: image_url.startsWith('http') ? image_url : `${url.origin}${image_url}`,
+                        webhook_url: WEBHOOK_URL,
+                        session_id: session_id,
+                        asset_id: concept_id
+                    };
+
+                    const headers = {
+                        "Content-Type": "application/json",
+                        "bypass-tunnel-reminder": "true",
+                        "x-tunnel-skip-interstitial": "true",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    };
+
+                    if (IS_RUNPOD && env.RUNPOD_API_KEY) {
+                        headers["Authorization"] = `Bearer ${env.RUNPOD_API_KEY}`;
+                    }
+
+                    console.log("[AI-ENGINE] Triggering:", AI_ENGINE_URL, "IsRunPod:", IS_RUNPOD);
+
+                    const aiPromise = fetch(AI_ENGINE_URL, {
+                        method: "POST",
+                        headers: headers,
+                        body: JSON.stringify(payload),
+                        signal: AbortSignal.timeout(60000)
                     }).then(async r => {
                         const txt = await r.text();
                         console.log(`[AI-ENGINE] Response status: ${r.status}`);
-                        console.log(`[AI-ENGINE] Response body (first 500 chars): ${txt.substring(0, 500)}`);
-                        if (r.status !== 200) {
-                            console.error(`[AI-ENGINE] Non-200 response! Status: ${r.status}`);
+                        if (r.status !== 200 && r.status !== 202) {
+                            console.error(`[AI-ENGINE] Error response! ${txt.substring(0, 200)}`);
                         }
                     }).catch(e => {
                         console.error("[AI-ENGINE] Fetch exception:", e.message);
@@ -548,26 +546,41 @@ Structure:
                 }
             }
 
-            // 6. Polling Endpoint for Frontend
+            // 6. Polling Endpoint for Frontend (Combined status)
             if (url.pathname === "/api/session/status" && request.method === "GET") {
                 const sessionId = url.searchParams.get("session_id");
                 const assetId = url.searchParams.get("asset_id");
 
-                let query = "SELECT status, stl_r2_path, final_stl_r2_path FROM Assets WHERE session_id = ?";
-                let params = [sessionId];
-
-                if (assetId) {
-                    query += " AND (id = ? OR image_url LIKE ?)";
-                    params.push(assetId, `%${assetId}%`);
-                } else {
-                    query += " AND status IN ('completed', 'processing', 'failed')";
+                if (!sessionId) {
+                    return new Response(JSON.stringify({ error: "No session_id provided" }), { status: 400, headers: corsHeaders });
                 }
 
-                query += " ORDER BY created_at DESC LIMIT 1";
+                // 6.1 Get Session
+                const session = await env.DB.prepare("SELECT * FROM Sessions WHERE id = ?").bind(sessionId).first();
+                if (!session) {
+                    return new Response(JSON.stringify({ error: "Session not found" }), { status: 404, headers: corsHeaders });
+                }
 
-                const asset = await env.DB.prepare(query).bind(...params).first();
+                // 6.2 Get Assets
+                const assets = await env.DB.prepare("SELECT * FROM Assets WHERE session_id = ?").bind(sessionId).all();
 
-                return new Response(JSON.stringify(asset || { status: 'not_started' }), {
+                // 6.3 If assetId is provided, also return the specific status for ThreeSceneViewer compatibility
+                let specificAsset = null;
+                if (assetId) {
+                    specificAsset = assets.results.find(a => a.id === assetId || a.image_url.includes(assetId));
+                }
+
+                return new Response(JSON.stringify({
+                    status: specificAsset ? specificAsset.status : (session.selected_concept_id ? 'processing' : 'selection'),
+                    session: {
+                        ...session,
+                        hobbies: JSON.parse(session.hobbies_json || "[]")
+                    },
+                    assets: assets.results,
+                    // Legacy fields for ThreeSceneViewer polling
+                    stl_r2_path: specificAsset?.stl_r2_path,
+                    final_stl_r2_path: specificAsset?.final_stl_r2_path
+                }), {
                     headers: { ...corsHeaders, "Content-Type": "application/json" },
                 });
             }
@@ -606,35 +619,99 @@ Structure:
                     return new Response(JSON.stringify({ error: "STL file not found in R2" }), { status: 404, headers: corsHeaders });
                 }
 
-                const SLICER_URL = env.SLICER_URL || "https://3dmemoreez-slicer.loca.lt/slice";
+                const SLICER_URL = env.SLICER_URL || "https://api.runpod.ai/v2/8e7yewc5qriemj/runsync";
+                const IS_RUNPOD_SLICER = SLICER_URL.includes("api.runpod.ai");
 
-                const formData = new FormData();
-                const stlArrayBuffer = await stlObject.arrayBuffer();
-                formData.append("file", new Blob([stlArrayBuffer]), "model.stl");
+                if (IS_RUNPOD_SLICER && !env.RUNPOD_API_KEY) {
+                    console.error("[SLICER] CRITICAL: RUNPOD_API_KEY is missing from environment!");
+                    return new Response(JSON.stringify({ error: "Configuration Error: Slicer API Key missing" }), { status: 500, headers: corsHeaders });
+                }
 
-                const slicerRes = await fetch(SLICER_URL, {
-                    method: "POST",
-                    body: formData,
-                    headers: { "bypass-tunnel-reminder": "true" }
-                });
+                let slicerRes;
+                if (IS_RUNPOD_SLICER) {
+                    const publicOrigin = "https://3d-memoreez-orchestrator.walid-elleuch.workers.dev";
+                    const stlUrl = `${publicOrigin}/api/assets/${stlKey}`;
+
+                    const payload = {
+                        input: {
+                            stl_url: stlUrl,
+                            session_id: session_id,
+                            asset_id: asset_id
+                        }
+                    };
+
+                    // MUST use Async because slicing takes ~30.5s and Cloudflare kills connections at 30.0s
+                    const runAsyncUrl = SLICER_URL.replace("/runsync", "/run");
+                    console.log(`[SLICER] Triggering RunPod Async: ${runAsyncUrl}`);
+
+                    slicerRes = await fetch(runAsyncUrl, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${env.RUNPOD_API_KEY}`
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                } else {
+                    const stlObject = await env.ASSETS_BUCKET.get(stlKey);
+                    const stlArrayBuffer = await stlObject.arrayBuffer();
+                    const formData = new FormData();
+                    formData.append("file", new Blob([stlArrayBuffer]), "model.stl");
+                    slicerRes = await fetch(SLICER_URL, {
+                        method: "POST",
+                        body: formData,
+                        headers: { "bypass-tunnel-reminder": "true" }
+                    });
+                }
 
                 if (!slicerRes.ok) {
+                    const body = await slicerRes.text();
+                    console.error(`[SLICER] API Error! Status: ${slicerRes.status}, Body: ${body.substring(0, 200)}`);
                     throw new Error(`Slicer API returned ${slicerRes.status}`);
                 }
 
                 const slicerData = await slicerRes.json();
+                console.log(`[SLICER] Response:`, JSON.stringify(slicerData).substring(0, 200));
 
-                if (slicerData.status === "success" && slicerData.gcode_filename) {
-                    // Fetch G-code from slicer
-                    const slicerBaseUrl = new URL(SLICER_URL).origin;
-                    const gcodeUrl = `${slicerBaseUrl}/gcode/${slicerData.gcode_filename}`;
-                    const gcodeRes = await fetch(gcodeUrl, { headers: { "bypass-tunnel-reminder": "true" } });
+                // If RunPod Async, return the Job ID to the frontend to start polling
+                if (IS_RUNPOD_SLICER && slicerData.id) {
+                    return new Response(JSON.stringify({
+                        status: "IN_PROGRESS",
+                        job_id: slicerData.id,
+                        message: "Slicing started asynchronously"
+                    }), { headers: corsHeaders });
+                }
 
-                    if (!gcodeRes.ok) throw new Error("Failed to download G-code from slicer");
+                // RunPod /runSync returns status: COMPLETED
+                if (slicerData.status === "success" || slicerData.status === "COMPLETED" || slicerData.output?.status === "success") {
+                    const results = slicerData.output || slicerData;
+
+                    let gcodeBinary;
+
+                    if (results.gcode_base64) {
+                        // Handle RunPod Serverless direct result (Base64)
+                        console.log("[SLICER] Decoding G-code from base64...");
+                        const binaryString = atob(results.gcode_base64);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        gcodeBinary = bytes.buffer;
+                    } else if (results.gcode_filename) {
+                        // Handle Direct/Tunnel result (Fetchable URL)
+                        console.log("[SLICER] Fetching G-code from URL...");
+                        const slicerBaseUrl = new URL(SLICER_URL).origin;
+                        const gcodeUrl = `${slicerBaseUrl}/gcode/${results.gcode_filename}`;
+                        const gcodeRes = await fetch(gcodeUrl, { headers: { "bypass-tunnel-reminder": "true" } });
+                        if (!gcodeRes.ok) throw new Error("Failed to download G-code from slicer");
+                        gcodeBinary = await gcodeRes.arrayBuffer();
+                    } else {
+                        throw new Error("Slicer success but no gcode data returned");
+                    }
 
                     // Save G-code to R2
                     const gcodeKey = `gcode___${session_id}___${asset_id}.gcode`;
-                    await env.ASSETS_BUCKET.put(gcodeKey, await gcodeRes.arrayBuffer(), {
+                    await env.ASSETS_BUCKET.put(gcodeKey, gcodeBinary, {
                         httpMetadata: { contentType: "text/plain" }
                     });
 
@@ -643,12 +720,84 @@ Structure:
                     // Respond with pricing stats and gcode path
                     return new Response(JSON.stringify({
                         success: true,
-                        stats: slicerData.stats,
+                        stats: results.stats,
                         gcode_r2_path: gcodeR2Path
                     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
                 } else {
-                    throw new Error(slicerData.detail || "Slicer failed to return success");
+                    throw new Error(slicerData.detail || slicerData.error || "Slicer failed to return success");
                 }
+            } // END /api/slice
+
+            // --- NEW: Polling Endpoint for Slicer ---
+            if (url.pathname === "/api/slice/status" && request.method === "GET") {
+                const jobId = url.searchParams.get("job_id");
+                const assetId = url.searchParams.get("asset_id");
+                const sessionId = url.searchParams.get("session_id");
+
+                if (!jobId) return new Response("Missing job_id", { status: 400, headers: corsHeaders });
+
+                const SLICER_URL = env.SLICER_URL || "https://api.runpod.ai/v2/8e7yewc5qriemj/runsync";
+                if (!SLICER_URL.includes("api.runpod.ai")) {
+                    return new Response("Polling only supported for RunPod", { status: 400, headers: corsHeaders });
+                }
+
+                const baseUrl = SLICER_URL.split("/run")[0]; // e.g., https://api.runpod.ai/v2/ENDPOINT
+                const statusUrl = `${baseUrl}/status/${jobId}`;
+
+                console.log(`[SLICER] Checking Job Status: ${jobId}`);
+
+                const statusRes = await fetch(statusUrl, {
+                    headers: { "Authorization": `Bearer ${env.RUNPOD_API_KEY}` }
+                });
+
+                if (!statusRes.ok) {
+                    return new Response(`RunPod Status Error: ${statusRes.status}`, { status: 500, headers: corsHeaders });
+                }
+
+                const statusData = await statusRes.json();
+
+                if (statusData.status === "COMPLETED") {
+                    console.log(`[SLICER] Job ${jobId} Completed!`);
+                    const results = statusData.output;
+
+                    let gcodeBinary;
+                    if (results.gcode_base64) {
+                        try {
+                            const binaryString = atob(results.gcode_base64);
+                            const bytes = new Uint8Array(binaryString.length);
+                            for (let i = 0; i < binaryString.length; i++) {
+                                bytes[i] = binaryString.charCodeAt(i);
+                            }
+                            gcodeBinary = bytes.buffer;
+                        } catch (e) {
+                            console.error("[SLICER] Base64 decode error on G-code");
+                        }
+                    }
+
+                    let gcodeR2Path = null;
+                    if (gcodeBinary) {
+                        const gcodeKey = `gcode___${sessionId || 'unknown'}___${assetId || 'unknown'}.gcode`;
+                        await env.ASSETS_BUCKET.put(gcodeKey, gcodeBinary, {
+                            httpMetadata: { contentType: "text/plain" }
+                        });
+                        gcodeR2Path = `/api/assets/${gcodeKey}`;
+                    }
+
+                    return new Response(JSON.stringify({
+                        status: "COMPLETED",
+                        success: true, // For frontend compatibility
+                        stats: results.stats,
+                        gcode_r2_path: gcodeR2Path
+                    }), { headers: corsHeaders });
+                }
+
+                if (statusData.status === "FAILED") {
+                    return new Response(JSON.stringify({ status: "FAILED", error: statusData.error }), { status: 500, headers: corsHeaders });
+                }
+
+                // If IN_QUEUE or IN_PROGRESS
+                console.log(`[SLICER] Job ${jobId} Status: ${statusData.status}`);
+                return new Response(JSON.stringify({ status: statusData.status }), { headers: corsHeaders });
             }
 
             // 8.1 Upload Final Merged STL (from Frontend CSG)

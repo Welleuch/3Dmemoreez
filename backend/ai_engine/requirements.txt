@@ -24,3 +24,4 @@ onnxruntime-gpu
 einops
 omegaconf
 imageio-ffmpeg
+runpod

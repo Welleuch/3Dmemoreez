@@ -51,7 +51,6 @@
    ▼
 [3D Studio Geometry Engine]
    │  • BVH-CSG: High-performance boolean operations in browser.
-   │  • Dual-Path Storage: Database keeps both stl_r2_path (raw) and final_stl_r2_path (manifold).
    │  • Persistence: Engraving text (line1/line2) lifted to App state to survive navigation.
    │  • Raw-First Loading: Studio always loads raw STL to prevent "stacked pedestal" recursion.
    │  • High-Stability Normalization: .toNonIndexed() applied to all meshes.
@@ -61,6 +60,17 @@
    │  • Constant-Depth Engraving: 0.4mm depth for structural FDM compliance.
    ▼
 [3D Viewer + Rounded Pedestal + Engraving]
+   │
+   │  Background Pre-Slicing (1.5s debounce after text change)
+   │  • POST /api/assets/upload-final (Manifold STL)
+   │  • POST /api/slice (Trigger RunPod) → Returns job_id
+   │  • GET /api/slice/status?job_id=XYZ (Frontend polls every 3s)
+   ▼
+[Wait for "Finalize Print"]
+   │  • If Job = COMPLETED, Instant Redirect to Checkout
+   │  • If Job = POLLING, Show Dynamic Loading UI until finished
+   ▼
+[Checkout]
 ```
 
 ---
@@ -70,13 +80,16 @@
 ### Cloudflare Worker — Production
 `https://3d-memoreez-orchestrator.walid-elleuch.workers.dev`
 
-| Method | Path | Purpose | Auth |
-|--------|------|---------|------|
-| `POST` | `/api/generate` | Llama → Flux → 4 images → D1/R2 | None |
-| `POST` | `/api/session/select` | Mark asset 'processing', trigger AI engine | None |
-| `GET` | `/api/session/status` | Poll asset completion status | None |
-| `POST` | `/api/webhook/runpod` | Receive STL from AI engine → R2 + D1 | None |
-| `GET` | `/api/assets/{key}` | Serve image/STL from R2 | None |
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/api/generate` | Llama → Flux → 4 images → D1/R2 |
+| `POST` | `/api/session/select` | Mark asset 'processing', trigger AI engine |
+| `GET` | `/api/session/status` | Poll asset completion status |
+| `POST` | `/api/webhook/runpod` | Receive STL from AI engine → R2 + D1 |
+| `POST` | `/api/assets/upload-final` | Frontend uploads merged manifold mesh to R2 |
+| `POST` | `/api/slice` | Trigger RunPod Asynchronous Slicer (`/run`) |
+| `GET` | `/api/slice/status` | Poll RunPod Slicer job status + R2 G-code upload |
+| `GET` | `/api/assets/{key}` | Serve image/STL/G-code from R2 |
 
 **Query params for `/api/session/status`:**
 - `session_id` (required) — UUID of the user session

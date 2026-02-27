@@ -8,7 +8,7 @@ import {
 } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
 import * as THREE from 'three';
-import { ChevronLeft, ArrowRight, Type, Box, Zap, Loader2 } from 'lucide-react';
+import { ChevronLeft, ArrowRight, Type, Box, Zap, Loader2, Printer } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -170,11 +170,16 @@ function AIModel({ url, onLoaded }) {
 }
 
 export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, setLine1, line2, setLine2, onNext, onBack }) {
-    const [isProcessing, setIsProcessing] = useState(false);
+    const [isFinalizing, setIsFinalizing] = useState(false);
     const [status, setStatus] = useState('processing');
     const [stlUrl, setStlUrl] = useState(null);
     const [modelData, setModelData] = useState({ bounds: null, mesh: null });
     const [mergedGeometry, setMergedGeometry] = useState(null);
+
+    // Pre-slicing states
+    const [bgJobId, setBgJobId] = useState(null);
+    const [bgJobStatus, setBgJobStatus] = useState("IDLE"); // IDLE, UPLOADING, SLICING, POLLING, COMPLETED, FAILED
+    const [bgJobResult, setBgJobResult] = useState(null);
 
     useEffect(() => {
         if (status === 'completed' || status === 'failed') return;
@@ -223,7 +228,6 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
 
             if (!uploadResp.ok) throw new Error("Failed to upload final manifold mesh");
 
-            // 3. Trigger Slicer
             const resp = await fetch(`${API_BASE_URL}/api/slice`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -235,26 +239,60 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
 
             if (!resp.ok) throw new Error("Slicing coordination failed");
 
-            const result = await resp.json();
+            const initialResult = await resp.json();
 
-            onNext({
-                sessionId: sessionId,
-                printEstimate: result.stats,
-                line1,
-                line2,
-                stlUrl,
-                gcode_r2_path: result.gcode_r2_path
-            });
+            // If it returns a job ID (Async mode for RunPod)
+            if (initialResult.job_id) {
+                console.log("[POLL] Started polling slicer job:", initialResult.job_id);
+                // Poll every 3 seconds
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const statusResp = await fetch(`${API_BASE_URL}/api/slice/status?job_id=${initialResult.job_id}&session_id=${sessionId}&asset_id=${selectedConcept.id}`);
+                        if (!statusResp.ok) throw new Error("Status check failed");
+
+                        const statusData = await statusResp.json();
+
+                        if (statusData.status === "COMPLETED" || statusData.success) {
+                            clearInterval(pollInterval);
+                            onNext({
+                                sessionId: sessionId,
+                                printEstimate: statusData.stats,
+                                line1,
+                                line2,
+                                stlUrl,
+                                gcode_r2_path: statusData.gcode_r2_path
+                            });
+                            setIsProcessing(false);
+                        } else if (statusData.status === "FAILED") {
+                            clearInterval(pollInterval);
+                            throw new Error(statusData.error || "Slicer Job Failed");
+                        }
+                    } catch (err) {
+                        clearInterval(pollInterval);
+                        console.error("Polling Error:", err);
+                        alert(`Slicing failed: ${err.message}`);
+                        setIsProcessing(false);
+                    }
+                }, 3000);
+            }
+            // Fallback for Local/Sync slicer that returns immediately
+            else if (initialResult.status === "success" || initialResult.success) {
+                onNext({
+                    sessionId: sessionId,
+                    printEstimate: initialResult.stats,
+                    line1,
+                    line2,
+                    stlUrl,
+                    gcode_r2_path: initialResult.gcode_r2_path
+                });
+                setIsProcessing(false);
+            } else {
+                throw new Error("Invalid Slicer response format");
+            }
+
         } catch (err) {
             console.error("Finalization Error:", err);
-            onNext({
-                sessionId: sessionId,
-                printEstimate: { total_material_grams: 45, total_material_cost: 1.35, print_time_display: "4h 15m" },
-                line1,
-                line2,
-                stlUrl
-            });
-        } finally {
+            alert(`Slicing failed: ${err.message}. Please try again in 10 seconds.`);
             setIsProcessing(false);
         }
     };
@@ -351,6 +389,33 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
                             </div>
                         )}
 
+                        {/* NEW: Dynamic Slicing UI while finalizing */}
+                        {isFinalizing && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-md z-50">
+                                <div className="flex flex-col items-center gap-6 p-10 bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-sm text-center">
+                                    <div className="relative">
+                                        <div className="w-20 h-20 border-4 border-slate-100 border-t-primary rounded-full animate-spin" />
+                                        <Printer className="absolute inset-0 m-auto w-8 h-8 text-primary animate-pulse" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-semibold text-slate-800 mb-2">
+                                            {bgJobStatus === "UPLOADING" ? "Preparing Geometry..." :
+                                                bgJobStatus === "SLICING" ? "Initializing Slicer Engine..." :
+                                                    bgJobStatus === "POLLING" ? "Generating Toolpaths & Supports..." :
+                                                        "Finalizing..."}
+                                        </h3>
+                                        <p className="text-sm text-slate-500">
+                                            This complex process ensures a perfect 3D print. It usually takes about 30 seconds.
+                                        </p>
+                                    </div>
+                                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2">
+                                        <div className="h-full bg-primary transition-all duration-1000 ease-out"
+                                            style={{ width: bgJobStatus === "UPLOADING" ? "20%" : bgJobStatus === "SLICING" ? "40%" : bgJobStatus === "POLLING" ? "85%" : "100%" }} />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="absolute top-8 right-8 w-full max-w-[280px]">
                             <div className="bg-white/80 p-6 rounded-2xl border border-slate-200 shadow-sm backdrop-blur-xl">
                                 <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-4">
@@ -379,15 +444,15 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
                 <div className="flex flex-col items-center gap-6 pt-6">
                     <motion.button
                         onClick={handleFinalize}
-                        disabled={isProcessing || status !== 'completed'}
+                        disabled={isFinalizing || status !== 'completed' || !isMerged}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        className={`px-16 py-5 rounded-xl font-medium text-lg transition-all shadow-sm ${isProcessing || status !== 'completed'
+                        className={`px-16 py-5 rounded-xl font-medium text-lg transition-all shadow-sm ${isFinalizing || status !== 'completed' || !isMerged
                             ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                             : 'bg-slate-900 text-white hover:bg-slate-800 hover:shadow-md'
                             }`}
                     >
-                        {isProcessing ? 'Slicing Geometry...' : 'Finalize Print'}
+                        {isFinalizing ? 'Preparing Print...' : 'Finalize Print'}
                     </motion.button>
                     <button
                         onClick={onBack}

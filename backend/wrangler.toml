@@ -3,8 +3,10 @@ main = "src/index.js"
 compatibility_date = "2024-03-18"
 
 [vars]
-# Add non-secret configuration variables here
-# RUNPOD_ENDPOINT_ID = "your-endpoint-id"
+RUNPOD_ENDPOINT_ID = "zvtrf584ejxx9j"
+AI_ENGINE_URL = "https://api.runpod.ai/v2/zvtrf584ejxx9j/run"
+SLICER_URL = "https://api.runpod.ai/v2/8e7yewc5qriemj/runsync"
+# RUNPOD_API_KEY should be set via Dashboard Secrets
 
 [[d1_databases]]
 binding = "DB"

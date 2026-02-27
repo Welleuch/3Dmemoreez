@@ -63,4 +63,4 @@ ENV MODEL_PATH=/runpod-volume/hunyuan3d-dit-v2_fp16.safetensors
 EXPOSE 8000
 
 # Start Server
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-u", "runpod_handler.py"]

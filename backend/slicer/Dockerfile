@@ -69,9 +69,9 @@ ENV PATH="/app/squashfs-root/usr/bin:$PATH"
 
 RUN mkdir -p /input /output
 
-COPY main.py requirements.txt ./
+COPY main.py runpod_handler.py requirements.txt ./
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 EXPOSE 8001
 
-CMD ["python3", "main.py"]
+CMD ["python3", "-u", "runpod_handler.py"]

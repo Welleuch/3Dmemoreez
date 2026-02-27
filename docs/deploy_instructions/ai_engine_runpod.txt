@@ -1,0 +1,17 @@
+# Please guide me through deploying my optimized AI Engine Docker image to a RunPod Serverless GPU endpoint.
+
+Here is the context for what I am trying to achieve:
+
+- **Goal:** Run my Hunyuan3D-based generative API on RunPod Serverless so I no longer need my local machine to compute.
+- **Docker Image:** The image is optimized (`python:3.10-slim` base, pre-baked `isnet-general-use` model, PyTorch Nightly `cu128`, size ~4GB).
+- **Network Volume Data:** The main model weights (`hunyuan3d-dit-v2_fp16.safetensors`, ~7GB) are NOT in the image. They must be mounted via a RunPod Network Volume.
+- **Application Context:** It's a FastAPI server running `main.py` that listens on port `8000`. The server expects the environment variable `MODEL_PATH` to point to the `safetensors` file on the network volume.
+
+Please break the process into actionable steps covering:
+1. Pushing my Docker image to a registry accessible by RunPod (e.g., Docker Hub).
+2. Creating and populating a RunPod Network Volume with my `7GB` safetensors model structure.
+3. Setting up the Serverless Endpoint (instance size, idle timeouts, concurrency).
+4. Required environment variables (`IS_DOCKER`, `MODEL_PATH`).
+5. Connecting the new RunPod Endpoint URL to my existing Cloudflare Worker backend.
+
+Reference the project architecture in `docs/ai_engine.md` and `docs/ARCHITECTURE.md` for specific volume mounting and API payload specifics.
