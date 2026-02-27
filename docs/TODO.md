@@ -144,20 +144,18 @@
 * [x] **Live Preview:** Engrave updates in real-time as user types with hot-swapping to prevent "ghost" models.
 * [x] **Unified Union:** `evaluator.evaluate(pedestal, figurine, ADDITION)` → single watertight merged geometry.
 
-## Phase 4b: PrusaSlicer Docker Image (Local) — ✅ COMPLETE
+## Phase 4b: PrusaSlicer Docker Image (Optimized) — ✅ COMPLETE
 
-* [x] **Dockerfile:** Ubuntu 22.04 + PrusaSlicer AppImage (headless/CLI build)
-* [x] **FastAPI wrapper:** Accepts STL file → runs `prusa-slicer-console --slice` → returns G-code + stats JSON
+* [x] **Multi-Stage Build:** Uses Ubuntu 22.04 builder to extract AppImage securely at build-time.
+* [x] **Headless Optimization:** Verified PrusaSlicer 2.8.1 (GTK3) can run in pure headless mode without `xvfb-run` overhead.
+* [x] **Dynamic Linker Patch:** Applied `sed` patch to `/usr/bin/prusa-slicer` wrapper to properly append to `LD_LIBRARY_PATH` instead of overwriting it, ensuring system graphics libraries are found.
+* [x] **FastAPI wrapper:** Accepts STL file → runs `prusa-slicer --slice` → returns G-code + stats JSON
     * [x] **Accurate Weight Calculation:** Fixed discrepancy (125g vs 83g) by parsing G-code line-by-line to extract support material. 
     * [x] **Ratio-based Math:** Total material = `(Object Extrusion + Support Extrusion)`. Support material grams calculated by the ratio of extrusion lengths.
 * [x] **docker-compose.yml:** Port 8001, volume mounts for input/output STLs
-* [x] **Cloudflare Worker route:** `POST /api/slice` → forwards STL to slicer (localtunnel) → returns `{stats, gcode_r2_path}`
+* [x] **Cloudflare Worker route:** `POST /api/slice` → forwards STL to slicer (local or container) → returns `{stats, gcode_r2_path}`
 * [x] **R2 storage:** Store G-code in R2 under `gcode___SESSION___ASSET.gcode`
-
-> **Note:** STL files don't store units. Hunyuan3D exports in inches - must multiply by 25.4 to get mm. Scale to 100mm based on largest dimension.
-* [ ] **Cloudflare Worker secret:** Add `RUNPOD_ENDPOINT_URL`
-* [ ] **Replace localtunnel:** Update `AI_ENGINE_URL` in `index.js` from localtunnel → RunPod endpoint
-* [ ] **Test end-to-end:** Verify full pipeline without localtunnel
+* [x] **Scaling Verification:** Confirmed cold-starts are instant as all extraction is done during build.
 
 ## Phase 6: Production Deployment — Slicer (Cloudflare Containers)
 

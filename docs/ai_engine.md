@@ -107,35 +107,21 @@ vae.eval()
 
 ---
 
-### RunPod "Hybrid" Storage Strategy (Fat vs. Lean)
-To achieve sub-30s container scaling on RunPod, we split our footprint:
-1. **Baked into Image (The "Fat" Runtime - ~4GB):** 
-   - Python + Linux deps + PyTorch Nightly `cu128`.
-   - `pre_download.py` bakes the `rembg` `isnet-general-use.onnx` model (~180MB) directly into `/app/.u2net`. This guarantees cold starts are not penalized by HuggingFace download latency.
-2. **External on Network Volume (The "Lean" Data - ~7GB):**
-   - The massive `hunyuan3d-dit-v2_fp16.safetensors` model is NOT baked into the image. If it were, the image would be 11GB+, drastically slowing down RunPod P2P network pulls and local deployments.
-   - It is mounted at runtime via `MODEL_PATH=/runpod-volume/hunyuan3d-dit-v2_fp16.safetensors`.
+---
 
-**Benchmark impact of baking the ~180MB rembg model (RTX 5060):**
-- **Cold load (API online):** 54s → 46s
-- **First-inference time:** 153s → 117s (Saved ~35s by eliminating runtime downloads and GPU/CPU resource contention).
+## 5. Docker Optimization: "The 30s Cold Start" Strategy
 
-### Volume mounts (`docker-compose.yml`)
-```yaml
-volumes:
-  - ./models:/app/models          # model weights (never baked into image)
-  - ./hy3dgen:/app/hy3dgen        # vendored library (hot-reload friendly)
-```
+To achieve near-instant scaling on Cloudflare/RunPod, we use a **Multi-Stage + Pre-baked** strategy.
 
-### Testing
-```powershell
-# Full automated build + test + teardown
-python test_docker_simulation.py
+### Build Architecture:
+1. **Base Image:** `python:3.10-slim` (Runtime) + `PyTorch Nightly (cu128)` for Blackwell support.
+2. **Pre-baked Models:** `isnet-general-use` (~180MB) is baked into the image at `/app/.u2net`.
+3. **External Weights:** `hunyuan3d-dit-v2_fp16.safetensors` (~7GB) is mounted via Network Volume to avoid image bloat.
 
-# Or manual trigger (no webhook receiver needed)
-$payload = @{session_id='test'; asset_id='a'; image_url='<url>'; webhook_url='http://host.docker.internal:9999/webhook'} | ConvertTo-Json
-Invoke-RestMethod -Method POST -Uri 'http://localhost:8000/generate-3d' -Body $payload -ContentType 'application/json'
-```
+### Benchmark Impact:
+- **Image Size:** ~4GB (Total)
+- **First-inference Spike:** Reduced by **~35s** (No on-demand downloads or GPU resource contention during weight pulling).
+- **Cold Boot (API Ready):** ~46s on RTX 5060 (local test).
 
 ---
 

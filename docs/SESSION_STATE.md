@@ -23,8 +23,8 @@ The 3D pipeline is now "Production Hardened." AI prompts strictly follow Additiv
 5. **Rounded Safety Pedestal:** Custom `LatheGeometry`-based cylinder with rounded edges for physical safety and premium aesthetics.
 6. **Stable Geometry Viewer:** Prevented "exploding spikes" and disappearing models by implementing safe-centering and geometry cloning (read-only cache protection).
 7. **Sync'd Payment Engine:** Backend Cloudflare Worker now correctly handles **EUR (€)** transactions with a **3.90€** shipping fee, matching the frontend UI exactly.
-8. **Local loopback (127.0.0.1):** Shifted away from fragile localtunnels for internal AI/Slicer communication to guarantee reliability during development.
-9. **Infrastructure:** Dockerized AI Engine (GPU) and Slicer (CPU) running locally on ports 8000 and 8001.
+8. **Stable Loopback:** Shifted away from fragile localtunnels for internal AI/Slicer communication to guarantee reliability during development.
+9. **Optimized Infrastructure:** Both AI Engine (GPU) and Slicer (CPU) images refactored for **headless production performance**, with pre-baked models and build-time AppImage extraction.
 
 ---
 
