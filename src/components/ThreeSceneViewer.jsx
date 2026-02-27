@@ -8,7 +8,7 @@ import {
 } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
 import * as THREE from 'three';
-import { ChevronLeft, ArrowRight, Type, Box, Zap, Loader2, Printer } from 'lucide-react';
+import { ChevronLeft, ArrowRight, Type, Box, Zap, Loader2, Printer, Sparkles, Gauge } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -181,6 +181,9 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
     const [bgJobStatus, setBgJobStatus] = useState("IDLE"); // IDLE, UPLOADING, SLICING, POLLING, COMPLETED, FAILED
     const [bgJobResult, setBgJobResult] = useState(null);
 
+    // Mesh Gen progress (fake but engaging)
+    const [meshProgress, setMeshProgress] = useState(0);
+
     useEffect(() => {
         if (status === 'completed' || status === 'failed') return;
         const poll = async () => {
@@ -193,12 +196,14 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
                 const currentAsset = data.assets?.find(a => a.id === selectedConcept?.id || a.image_url.includes(selectedConcept?.id));
 
                 if (currentAsset?.status === 'completed' && currentAsset.stl_r2_path) {
+                    setMeshProgress(100);
                     setStatus('completed');
-                    // ALWAYS use the raw model (stl_r2_path) for the 3D Studio. 
-                    // This ensures that if the user goes back, they aren't loading a manifold model that already has a pedestal.
                     setStlUrl(`${API_BASE_URL}/api/assets/${currentAsset.stl_r2_path}`);
                 } else if (currentAsset?.status === 'failed') {
                     setStatus('failed');
+                } else {
+                    // Slowly increment progress up to 95% while waiting
+                    setMeshProgress(prev => Math.min(prev + (Math.random() * 5), 95));
                 }
             } catch (err) { console.error("Polling error:", err); }
         };
@@ -425,13 +430,35 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
                         </Canvas>
 
                         {status === 'processing' && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm z-10">
-                                <div className="flex flex-col items-center gap-6 p-10 bg-white/90 rounded-3xl border border-slate-200 shadow-xl">
+                            <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-md z-50">
+                                <div className="flex flex-col items-center gap-6 p-10 bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-sm text-center">
                                     <div className="relative">
-                                        <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-                                        <Loader2 className="absolute inset-0 m-auto w-6 h-6 text-primary animate-pulse" />
+                                        <div className="w-20 h-20 border-4 border-slate-100 border-t-primary rounded-full animate-spin" />
+                                        <Sparkles className="absolute inset-0 m-auto w-8 h-8 text-primary animate-pulse" />
                                     </div>
-                                    <h3 className="text-lg font-medium tracking-wide text-slate-800">Crystallizing Blueprint...</h3>
+                                    <div>
+                                        <h3 className="text-xl font-semibold text-slate-800 mb-2">
+                                            {meshProgress < 30 ? "Analyzing Vision..." :
+                                                meshProgress < 60 ? "Sculpting Geometry..." :
+                                                    meshProgress < 90 ? "Finalizing 3D Blueprint..." :
+                                                        "Polishing Details..."}
+                                        </h3>
+                                        <p className="text-sm text-slate-500">
+                                            Our AI is transforming your idea into a watertight 3D model. This usually takes 45-60 seconds.
+                                        </p>
+                                    </div>
+                                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2">
+                                        <div
+                                            className="h-full bg-primary transition-all duration-700 ease-out"
+                                            style={{ width: `${meshProgress}%` }}
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-full border border-slate-100">
+                                        <Gauge className="w-3 h-3 text-slate-400" />
+                                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">
+                                            Precision: 0.125mm
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         )}
