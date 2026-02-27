@@ -287,9 +287,9 @@
 
 ## Phase 17: Landing Page Chat UX Refinement
 
-* [ ] **Fix Session Recovery UI:** Remove the redundant "Subject: Recovered... Story: Subject: ..." text when navigating back/recovering a session to eliminate scrolling issues and visual clutter.
-* [ ] **Remove Confirmation Step:** Eliminate the AI's final "Got it! Feel free to crystallize..." message.
-* [ ] **Auto-Launch Generation:** Automatically trigger the "Crystallize Data" (image generation) action as soon as the user submits their second input (hobbies/facts), removing the need for a final manual button click.
+* [x] **Fix Session Recovery UI:** Remove the redundant "Subject: Recovered... Story: Subject: ..." text when navigating back/recovering a session to eliminate scrolling issues and visual clutter.
+* [x] **Remove Confirmation Step:** Eliminate the AI's final "Got it! Feel free to crystallize..." message.
+* [x] **Auto-Launch Generation:** Automatically trigger the "Crystallize Data" (image generation) action as soon as the user submits their second input (hobbies/facts), removing the need for a final manual button click.
 
 ---
 

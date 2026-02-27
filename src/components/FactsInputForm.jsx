@@ -20,18 +20,36 @@ export default function FactsInputForm({ onSubmit, isGenerating, initialData }) 
     // If there is meaningful initial data (e.g., coming back from a later step), pre-fill the chat
     useEffect(() => {
         if (hasInitialData && step === 0) {
-            setMessages([
+            let recoveredSubject = "Someone special";
+            let recoveredStory = "";
+
+            if (meaningfulHobbies.length >= 2 && meaningfulHobbies[0].startsWith("Subject: ")) {
+                recoveredSubject = meaningfulHobbies[0].replace("Subject: ", "").trim();
+                // Reconstruct the story, removing the "Story: " prefix if present from subsequent items
+                recoveredStory = meaningfulHobbies.slice(1).map(h => h.replace("Story: ", "").trim()).join("\n");
+            } else if (meaningfulHobbies.length === 1 && meaningfulHobbies[0].startsWith("Subject: ")) {
+                recoveredSubject = meaningfulHobbies[0].replace("Subject: ", "").trim();
+            } else {
+                recoveredSubject = "Recovered Session";
+                recoveredStory = initialText;
+            }
+
+            const newMessages = [
                 { id: 1, role: 'system', content: "Hi! Who are we celebrating today?" },
-                { id: 2, role: 'user', content: "Recovered Session" },
-                { id: 3, role: 'system', content: "Great! Tell me more about them. What are their hobbies, defining traits, favorite memories, or pets? Let's make it special." },
-                { id: 4, role: 'user', content: initialText },
-                { id: 5, role: 'system', content: "Got it! Feel free to crystallize this concept, or adjust your story below." }
-            ]);
-            setSubject("Recovered");
-            setStory(initialText);
+                { id: 2, role: 'user', content: recoveredSubject },
+                { id: 3, role: 'system', content: "Great! Tell me more about them. What are their hobbies, defining traits, favorite memories, or pets? Let's make it special." }
+            ];
+
+            if (recoveredStory) {
+                newMessages.push({ id: 4, role: 'user', content: recoveredStory });
+            }
+
+            setMessages(newMessages);
+            setSubject(recoveredSubject);
+            setStory(recoveredStory);
             setStep(2);
         }
-    }, [hasInitialData, initialText, step]);
+    }, [hasInitialData, initialText, step, meaningfulHobbies]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -59,15 +77,30 @@ export default function FactsInputForm({ onSubmit, isGenerating, initialData }) 
             }, 600);
         } else if (step === 1 || step === 2) {
             // Allow them to append/update the story even if in step 2
-            setStory(prev => prev ? prev + "\n" + currentInput : currentInput);
-            setStep(2);
-            setTimeout(() => {
-                setMessages(prev => [...prev, {
-                    id: Date.now() + 1,
-                    role: 'system',
-                    content: "Noted! Whenever you're ready, click 'Crystallize Form' to generate the concepts."
-                }]);
-            }, 600);
+            const newStory = story ? story + "\n" + currentInput : currentInput;
+            setStory(newStory);
+
+            if (step === 1) {
+                setStep(2);
+                const combinedPayload = [
+                    `Subject: ${subject}`,
+                    `Story: ${newStory}`
+                ];
+                // CRITICAL: Trigger submission immediately to skip AI confirmation
+                setTimeout(() => {
+                    onSubmit({ hobbies: combinedPayload });
+                }, 300);
+            } else {
+                // If they are already in step 2 (appending more info), just acknowledge
+                setStep(2);
+                setTimeout(() => {
+                    setMessages(prev => [...prev, {
+                        id: Date.now() + 1,
+                        role: 'system',
+                        content: "Added! When you're ready, click 'Crystallize Data' to update the concepts."
+                    }]);
+                }, 600);
+            }
         }
     };
 
@@ -113,7 +146,7 @@ export default function FactsInputForm({ onSubmit, isGenerating, initialData }) 
                 className="w-full bg-white/60 backdrop-blur-2xl rounded-[2rem] border border-slate-200 shadow-md flex flex-col h-[65vh] min-h-[500px] max-h-[750px] overflow-hidden"
             >
                 {/* Messages Area - flex-grow ensures this wrapper expands, and its children scroll */}
-                <div className="flex-grow overflow-y-auto p-6 md:p-8 space-y-8 scroll-smooth will-change-scroll">
+                <div className="flex-grow overflow-y-auto overflow-x-hidden p-6 md:p-8 space-y-8 scroll-smooth will-change-scroll custom-scrollbar">
                     <AnimatePresence initial={false}>
                         {messages.map((msg) => (
                             <motion.div
@@ -133,8 +166,8 @@ export default function FactsInputForm({ onSubmit, isGenerating, initialData }) 
                                         {msg.role === 'system' ? '3Dmemoreez AI' : 'You'}
                                     </span>
                                     <div className={`px-5 py-4 md:px-6 md:py-4 rounded-[1.5rem] font-light text-base md:text-lg leading-relaxed shadow-sm flex flex-col justify-center min-h-[40px] md:min-h-[48px] ${msg.role === 'user'
-                                            ? 'bg-slate-800 text-white rounded-tr-sm'
-                                            : 'bg-white border border-slate-100 text-slate-700 rounded-tl-sm'
+                                        ? 'bg-slate-800 text-white rounded-tr-sm'
+                                        : 'bg-white border border-slate-100 text-slate-700 rounded-tl-sm'
                                         }`}>
                                         {msg.content.split('\n').map((line, i) => (
                                             <span key={i} className="block min-h-[1.2rem]">
@@ -191,8 +224,8 @@ export default function FactsInputForm({ onSubmit, isGenerating, initialData }) 
                                     whileHover={{ scale: 1.02 }}
                                     whileTap={{ scale: 0.98 }}
                                     className={`group relative overflow-hidden px-8 py-3 md:px-10 md:py-3.5 rounded-full shrink-0 font-medium text-sm md:text-base transition-all duration-300 shadow-sm ml-auto ${isGenerating
-                                            ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                                            : 'bg-primary text-white hover:bg-primary-hover shadow-md hover:shadow-lg'
+                                        ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                                        : 'bg-primary text-white hover:bg-primary-hover shadow-md hover:shadow-lg'
                                         }`}
                                 >
                                     <div className="relative z-10 flex items-center justify-center gap-2">
