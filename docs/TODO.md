@@ -281,3 +281,4 @@
 * [x] **Background Pre-Slicing:** Re-engineered `ThreeSceneViewer` to silently trigger the 30-second Slicing job in the background as soon as the Studio loads (with a 1.5s debounce).
 * [x] **Instant Finalize:** Clicking "Finalize Print" after viewing the model for > 30 seconds results in an *instant* transition to Checkout, hiding the entire compute wait time.
 * [x] **Dynamic Loading Modal:** Built a beautiful, dynamic React `Printer` modal that displays accurate backend status (`UPLOADING`, `SLICING`, `POLLING`) and progressive a load bar if the user clicks Finalize before the background job finishes.
+* [x] **Unified Loading UX:** Upgraded the Step 3 (Mesh Generation) loading state to match the premium slicing aesthetic, including dynamic progress bars, engaging narrative text, and glassmorphism UI elements.
