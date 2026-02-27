@@ -162,6 +162,31 @@ export default function App() {
         }
     };
 
+    const handleGenerateMore = async () => {
+        setIsGenerating(true);
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    hobbies: formData.hobbies,
+                    session_id: sessionId // Pass session ID to potentially influence variety or storage
+                })
+            });
+
+            if (!response.ok) throw new Error('Generation failed');
+
+            const result = await response.json();
+            // Append new concepts to the existing ones
+            setConcepts(prev => [...prev, ...result.concepts]);
+            setIsGenerating(false);
+        } catch (error) {
+            console.error('More Generation Error:', error);
+            setIsGenerating(false);
+            alert(`Failed to explore more concepts: ${error.message}`);
+        }
+    };
+
     const handleConceptSelect = async (concept) => {
         setSelectedConcept(concept);
 
@@ -265,6 +290,8 @@ export default function App() {
                                         concepts={concepts}
                                         onSelect={handleConceptSelect}
                                         onBack={prevStep}
+                                        onGenerateMore={handleGenerateMore}
+                                        isGenerating={isGenerating}
                                     />
                                 )}
                                 {currentStep === 2 && (

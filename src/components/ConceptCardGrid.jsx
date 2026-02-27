@@ -1,7 +1,7 @@
 import { ChevronLeft, CheckCircle2, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-export default function ConceptCardGrid({ concepts, onSelect, onBack }) {
+export default function ConceptCardGrid({ concepts, onSelect, onBack, onGenerateMore, isGenerating }) {
     return (
         <div className="w-full max-w-6xl mx-auto px-4 py-8 md:py-16">
             <div className="text-center mb-16 md:mb-24">
@@ -75,13 +75,34 @@ export default function ConceptCardGrid({ concepts, onSelect, onBack }) {
                 ))}
             </div>
 
-            <div className="text-center py-16 bg-slate-50 rounded-3xl border border-slate-200 shadow-sm mx-auto max-w-2xl">
-                <p className="text-slate-500 mb-6 font-light text-lg">Looking for a different artistic direction?</p>
+            <div className="flex flex-col md:flex-row gap-6 justify-center items-center py-20 border-t border-slate-100 mt-12">
                 <button
                     onClick={onBack}
-                    className="text-slate-800 font-medium hover:text-primary transition-colors border-b border-slate-300 hover:border-primary pb-1"
+                    className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-all px-8 py-3.5 rounded-2xl border border-slate-200 hover:bg-slate-50 font-medium text-sm md:text-base group"
                 >
-                    Regenerate Alternative Concepts
+                    <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                    Revise Story
+                </button>
+
+                <button
+                    onClick={onGenerateMore}
+                    disabled={isGenerating}
+                    className={`flex items-center gap-2 px-10 py-4 rounded-2xl font-medium text-sm md:text-base transition-all shadow-sm ${isGenerating
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                        : 'bg-slate-900 text-white hover:bg-slate-800 shadow-md hover:shadow-lg'
+                        }`}
+                >
+                    {isGenerating ? (
+                        <>
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Exploring Directions...
+                        </>
+                    ) : (
+                        <>
+                            Explore More Concepts
+                            <TrendingUp className="w-4 h-4" />
+                        </>
+                    )}
                 </button>
             </div>
         </div>
