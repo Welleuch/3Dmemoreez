@@ -206,96 +206,143 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
         return () => clearInterval(interval);
     }, [sessionId, status]);
 
+    // Background Pre-Slicing Logic
+    useEffect(() => {
+        if (!mergedGeometry || !selectedConcept) return;
+
+        console.log("[PRE-SLICE] Geometry updated, starting background slice in 1.5 seconds...");
+        setBgJobId(null);
+        setBgJobStatus("IDLE");
+        setBgJobResult(null);
+
+        let isMounted = true;
+        let pollInterval = null;
+
+        // Debounce the pre-slice slightly in case of rapid text updates
+        const timeoutId = setTimeout(async () => {
+            try {
+                setBgJobStatus("UPLOADING");
+
+                // 1. Export
+                const exporter = new STLExporter();
+                const mesh = new THREE.Mesh(mergedGeometry, new THREE.MeshStandardMaterial());
+                const stlData = exporter.parse(mesh, { binary: true });
+
+                // 2. Upload
+                const formData = new FormData();
+                formData.append("file", new Blob([stlData], { type: "model/stl" }), "final_merged.stl");
+                formData.append("session_id", sessionId);
+                formData.append("asset_id", selectedConcept.id);
+
+                const uploadResp = await fetch(`${API_BASE_URL}/api/assets/upload-final`, {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!uploadResp.ok) throw new Error("Upload failed");
+                if (!isMounted) return;
+
+                // 3. Trigger Slicer
+                setBgJobStatus("SLICING");
+                const resp = await fetch(`${API_BASE_URL}/api/slice`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        asset_id: selectedConcept.id
+                    })
+                });
+
+                if (!resp.ok) throw new Error("Slice trigger failed");
+                const initialResult = await resp.json();
+                if (!isMounted) return;
+
+                if (initialResult.job_id) {
+                    setBgJobId(initialResult.job_id);
+                    setBgJobStatus("POLLING");
+
+                    pollInterval = setInterval(async () => {
+                        try {
+                            const statusResp = await fetch(`${API_BASE_URL}/api/slice/status?job_id=${initialResult.job_id}&session_id=${sessionId}&asset_id=${selectedConcept.id}`);
+                            if (!statusResp.ok) return;
+
+                            const statusData = await statusResp.json();
+                            if (!isMounted) return;
+
+                            if (statusData.status === "COMPLETED" || statusData.success) {
+                                clearInterval(pollInterval);
+                                console.log("[PRE-SLICE] Completed successfully in background!");
+                                setBgJobStatus("COMPLETED");
+                                setBgJobResult(statusData);
+                            } else if (statusData.status === "FAILED") {
+                                clearInterval(pollInterval);
+                                setBgJobStatus("FAILED");
+                            }
+                        } catch (e) {
+                            // Silently ignore poll errors
+                        }
+                    }, 3000);
+                } else if (initialResult.status === "success" || initialResult.success) {
+                    setBgJobStatus("COMPLETED");
+                    setBgJobResult(initialResult);
+                }
+            } catch (err) {
+                console.error("[PRE-SLICE] Error:", err);
+                if (isMounted) setBgJobStatus("FAILED");
+            }
+        }, 1500);
+
+        return () => {
+            isMounted = false;
+            clearTimeout(timeoutId);
+            if (pollInterval) clearInterval(pollInterval);
+        };
+    }, [mergedGeometry, selectedConcept?.id, sessionId]);
+
     const handleFinalize = async () => {
         if (!mergedGeometry) return;
-        setIsProcessing(true);
-        try {
-            // 1. Export merged geometry to STL
-            const exporter = new STLExporter();
-            const mesh = new THREE.Mesh(mergedGeometry, new THREE.MeshStandardMaterial());
-            const stlData = exporter.parse(mesh, { binary: true });
 
-            // 2. Upload final STL to R2
-            const formData = new FormData();
-            formData.append("file", new Blob([stlData], { type: "model/stl" }), "final_merged.stl");
-            formData.append("session_id", sessionId);
-            formData.append("asset_id", selectedConcept.id);
-
-            const uploadResp = await fetch(`${API_BASE_URL}/api/assets/upload-final`, {
-                method: "POST",
-                body: formData
+        // If background slice already finished, proceed instantly!
+        if (bgJobStatus === "COMPLETED" && bgJobResult) {
+            console.log("[FINALIZE] Using pre-sliced result!");
+            onNext({
+                sessionId: sessionId,
+                printEstimate: bgJobResult.stats,
+                line1,
+                line2,
+                stlUrl,
+                gcode_r2_path: bgJobResult.gcode_r2_path
             });
-
-            if (!uploadResp.ok) throw new Error("Failed to upload final manifold mesh");
-
-            const resp = await fetch(`${API_BASE_URL}/api/slice`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    session_id: sessionId,
-                    asset_id: selectedConcept.id
-                })
-            });
-
-            if (!resp.ok) throw new Error("Slicing coordination failed");
-
-            const initialResult = await resp.json();
-
-            // If it returns a job ID (Async mode for RunPod)
-            if (initialResult.job_id) {
-                console.log("[POLL] Started polling slicer job:", initialResult.job_id);
-                // Poll every 3 seconds
-                const pollInterval = setInterval(async () => {
-                    try {
-                        const statusResp = await fetch(`${API_BASE_URL}/api/slice/status?job_id=${initialResult.job_id}&session_id=${sessionId}&asset_id=${selectedConcept.id}`);
-                        if (!statusResp.ok) throw new Error("Status check failed");
-
-                        const statusData = await statusResp.json();
-
-                        if (statusData.status === "COMPLETED" || statusData.success) {
-                            clearInterval(pollInterval);
-                            onNext({
-                                sessionId: sessionId,
-                                printEstimate: statusData.stats,
-                                line1,
-                                line2,
-                                stlUrl,
-                                gcode_r2_path: statusData.gcode_r2_path
-                            });
-                            setIsProcessing(false);
-                        } else if (statusData.status === "FAILED") {
-                            clearInterval(pollInterval);
-                            throw new Error(statusData.error || "Slicer Job Failed");
-                        }
-                    } catch (err) {
-                        clearInterval(pollInterval);
-                        console.error("Polling Error:", err);
-                        alert(`Slicing failed: ${err.message}`);
-                        setIsProcessing(false);
-                    }
-                }, 3000);
-            }
-            // Fallback for Local/Sync slicer that returns immediately
-            else if (initialResult.status === "success" || initialResult.success) {
-                onNext({
-                    sessionId: sessionId,
-                    printEstimate: initialResult.stats,
-                    line1,
-                    line2,
-                    stlUrl,
-                    gcode_r2_path: initialResult.gcode_r2_path
-                });
-                setIsProcessing(false);
-            } else {
-                throw new Error("Invalid Slicer response format");
-            }
-
-        } catch (err) {
-            console.error("Finalization Error:", err);
-            alert(`Slicing failed: ${err.message}. Please try again in 10 seconds.`);
-            setIsProcessing(false);
+            return;
         }
+
+        if (bgJobStatus === "FAILED") {
+            alert("Slicing failed formatting the geometry. Please adjust text slightly and try again.");
+            return;
+        }
+
+        // Otherwise, show the dynamic loading modal while the background job finishes
+        setIsFinalizing(true);
     };
+
+    // Watch for bg job completion while the finalizing modal is open
+    useEffect(() => {
+        if (isFinalizing && bgJobStatus === "COMPLETED" && bgJobResult) {
+            setIsFinalizing(false);
+            onNext({
+                sessionId: sessionId,
+                printEstimate: bgJobResult.stats,
+                line1,
+                line2,
+                stlUrl,
+                gcode_r2_path: bgJobResult.gcode_r2_path
+            });
+        }
+        if (isFinalizing && bgJobStatus === "FAILED") {
+            setIsFinalizing(false);
+            alert("Slicing failed. Please adjust text and try again.");
+        }
+    }, [isFinalizing, bgJobStatus, bgJobResult, sessionId, line1, line2, stlUrl, onNext]);
 
     const [isMerged, setIsMerged] = useState(false);
     const [hasPositioned, setHasPositioned] = useState(false);
