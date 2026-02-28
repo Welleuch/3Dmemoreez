@@ -375,102 +375,83 @@ Structure:
 
                     console.log("[LLAMA] Concepts generated:", JSON.stringify(result, null, 2));
 
-                    // 3.2 Flux Image Generation (Streaming with SSE)
+                    // 3.2 Flux Image Generation (Parallel for maximum speed)
                     const FLUX_SUFFIX = ", 3D untextured clay render, ambient occlusion pass, solid matte gray geometric shape, single monolithic fused mass, pyramidal composition, no overhangs, no undercuts, Support-Free FDM design, completely monochrome, absence of any color, neutral gray pixels only, solid white background #FFFFFF, isolated floating object, no shadows, no scenery";
 
-                    const { readable, writable } = new TransformStream();
-                    const writer = writable.getWriter();
-                    const encoder = new TextEncoder();
+                    console.log(`[FLUX] Starting parallel generation for 4 concepts...`);
 
-                    ctx.waitUntil((async () => {
+                    const generationPromises = result.concepts.slice(0, 4).map(async (concept) => {
                         try {
-                            let writeMutex = Promise.resolve();
-                            const sendSSE = (data) => {
-                                writeMutex = writeMutex.then(() => writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)));
-                                return writeMutex;
-                            };
+                            const finalPrompt = concept.prompt + FLUX_SUFFIX;
 
-                            // Send Session ID immediately to unblock the frontend UI
-                            await sendSSE({ type: 'session', session_id: sessionId });
-
-                            console.log(`[FLUX] Starting parallel generation for 4 concepts...`);
-
-                            const generationPromises = result.concepts.slice(0, 4).map(async (concept) => {
-                                try {
-                                    const finalPrompt = concept.prompt + FLUX_SUFFIX;
-
-                                    const fluxResponse = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
-                                        prompt: finalPrompt,
-                                        num_steps: 4
-                                    });
-
-                                    if (!fluxResponse) throw new Error("No data from Flux");
-
-                                    let binaryData;
-                                    if (fluxResponse instanceof ArrayBuffer || fluxResponse instanceof ReadableStream || fluxResponse instanceof Blob || (typeof Uint8Array !== 'undefined' && fluxResponse instanceof Uint8Array)) {
-                                        binaryData = fluxResponse;
-                                    } else if (fluxResponse instanceof Response) {
-                                        binaryData = await fluxResponse.arrayBuffer();
-                                    } else if (typeof fluxResponse === 'object' && fluxResponse.image) {
-                                        const base64String = fluxResponse.image;
-                                        const binaryString = atob(base64String);
-                                        const bytes = new Uint8Array(binaryString.length);
-                                        for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-                                        binaryData = bytes.buffer;
-                                    } else {
-                                        binaryData = fluxResponse;
-                                    }
-
-                                    const assetId = crypto.randomUUID();
-                                    const safeKey = `concepts___${sessionId}___${assetId}.png`;
-
-                                    // Save to R2 directly alongside generation
-                                    await env.ASSETS_BUCKET.put(safeKey, binaryData, {
-                                        httpMetadata: { contentType: "image/png" }
-                                    });
-
-                                    const finalConcept = {
-                                        id: assetId,
-                                        url: `${url.origin}/api/assets/${safeKey}`,
-                                        safeKey: safeKey,
-                                        title: concept.title,
-                                        type: concept.type,
-                                        score: Math.floor(Math.random() * 15) + 80
-                                    };
-
-                                    // DB Insert (Directly string interpolate safeKey and values)
-                                    await env.DB.prepare("INSERT INTO Assets (session_id, image_url, title, type) VALUES (?, ?, ?, ?)").bind(sessionId, `/api/assets/${safeKey}`, concept.title, concept.type).run();
-
-                                    // Stream out to the client!
-                                    await sendSSE({ type: 'concept', concept: finalConcept });
-
-                                } catch (err) {
-                                    console.error(`[FLUX] Task failed for ${concept.title}:`, err.message);
-                                }
+                            const fluxResponse = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
+                                prompt: finalPrompt,
+                                num_steps: 4
                             });
 
-                            const results = await Promise.allSettled(generationPromises);
+                            if (!fluxResponse) throw new Error("No data from Flux");
 
-                            // Let the client know the stream is complete
-                            await sendSSE({ type: 'done' });
+                            let binaryData;
+                            if (fluxResponse instanceof ArrayBuffer || fluxResponse instanceof ReadableStream || fluxResponse instanceof Blob || (typeof Uint8Array !== 'undefined' && fluxResponse instanceof Uint8Array)) {
+                                binaryData = fluxResponse;
+                            } else if (fluxResponse instanceof Response) {
+                                binaryData = await fluxResponse.arrayBuffer();
+                            } else if (typeof fluxResponse === 'object' && fluxResponse.image) {
+                                const base64String = fluxResponse.image;
+                                const binaryString = atob(base64String);
+                                const bytes = new Uint8Array(binaryString.length);
+                                for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+                                binaryData = bytes.buffer;
+                            } else {
+                                binaryData = fluxResponse;
+                            }
 
+                            const assetId = crypto.randomUUID();
+                            const safeKey = `concepts___${sessionId}___${assetId}.png`;
+
+                            await env.ASSETS_BUCKET.put(safeKey, binaryData, {
+                                httpMetadata: { contentType: "image/png" }
+                            });
+
+                            return {
+                                id: assetId,
+                                url: `${url.origin}/api/assets/${safeKey}`,
+                                safeKey: safeKey, // Store key for batch DB
+                                title: concept.title,
+                                type: concept.type,
+                                score: Math.floor(Math.random() * 15) + 80
+                            };
                         } catch (err) {
-                            console.error("[GENERATE] Stream Orchestration Error:", err);
-                            await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'error', message: err.message })}\n\n`));
-                        } finally {
-                            await writer.close();
-                        }
-                    })());
-
-                    return new Response(readable, {
-                        headers: {
-                            ...corsHeaders,
-                            "Content-Type": "text/event-stream",
-                            "Cache-Control": "no-cache",
-                            "Connection": "keep-alive"
+                            console.error(`[FLUX] Parallel task failed for ${concept.title}:`, err.message);
+                            throw err;
                         }
                     });
 
+                    const generationResults = await Promise.allSettled(generationPromises);
+
+                    const finalConcepts = generationResults
+                        .filter(res => res.status === 'fulfilled')
+                        .map(res => res.value);
+
+                    if (finalConcepts.length === 0) {
+                        const firstError = generationResults.find(res => res.status === 'rejected')?.reason?.message || "Generation failed";
+                        throw new Error(firstError);
+                    }
+
+                    // Batch DB Update (Much faster)
+                    const dbBatch = finalConcepts.map(c =>
+                        env.DB.prepare("INSERT INTO Assets (session_id, image_url, title, type) VALUES (?, ?, ?, ?)").bind(sessionId, `/api/assets/${c.safeKey}`, c.title, c.type)
+                    );
+                    if (dbBatch.length > 0) {
+                        ctx.waitUntil(env.DB.batch(dbBatch).catch(e => console.error("Batch DB Fail:", e)));
+                    }
+
+                    return new Response(JSON.stringify({
+                        session_id: sessionId,
+                        concepts: finalConcepts
+                    }), {
+                        headers: { ...corsHeaders, "Content-Type": "application/json" },
+                    });
                 } catch (err) {
                     console.error("[GENERATE] Global Error:", err);
                     return new Response(JSON.stringify({ error: err.message }), {
