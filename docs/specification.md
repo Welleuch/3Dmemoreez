@@ -20,7 +20,7 @@ The platform prioritizes:
 
 | Layer | Technology | Status |
 |---|---|---|
-| **Frontend** | React (Vite) + React Three Fiber | ✅ Live |
+| **Frontend** | React (Vite) + React Three Fiber | ✅ Live — `3dmemoreez.pages.dev` |
 | **3D Geometry Engine** | three-bvh-csg (in-browser) | ✅ Complete |
 | **AI Orchestration** | Cloudflare Workers (Llama 3 + Flux Schnell) | ✅ Deployed |
 | **Image Preprocessing** | rembg `isnet-general-use` (local, in AI engine) | ✅ Working |
@@ -39,11 +39,15 @@ The platform prioritizes:
 ## 3. Full App Pipeline (Input → Payment → Confirmation)
 
 ### Stage 1 — Input (`FactsInputForm`)
-- User fills 3 hobby/fact fields
-- Submits → `POST /api/generate` to Cloudflare Worker
-- Worker calls Llama 3 (system prompt with DfAM constraints + pure white studio background mandate)
-- Worker calls Flux Schnell × 4 in parallel (each prompt + hard-coded FLUX_SUFFIX for white BG)
-- 4 images stored in R2 → returned as concept list
+- User fills a premium card-based form with 4 fields:
+  - **Who are we celebrating?** (name / relationship, e.g. "My dad", "Sophie")
+  - **Their passions & hobbies** (free text, e.g. "loves tennis, morning coffee, hiking")
+  - **Something quirky or fun** (optional, e.g. "obsessed with cats, hates Mondays")
+  - **Occasion** (optional pill-chip selector: Birthday, Graduation, Anniversary, etc.)
+- All fields combined into a `hobbies[]` string array → `POST /api/generate` to Cloudflare Worker
+- Worker calls Llama 3 (full DfAM system prompt with catchy mandate, single-object constraint, safety rules)
+- Worker calls Flux Schnell × 4 in parallel (each prompt + hard-coded FLUX_SUFFIX for monochrome white BG)
+- 4 images stored in R2 → returned as JSON concept list to frontend
 
 ### Stage 2 — Concept Gallery (`ConceptCardGrid`)
 - 4 concept cards displayed (2 Literal, 2 Artistic)
