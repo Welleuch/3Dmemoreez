@@ -1,6 +1,6 @@
 # 3Dmemoreez — System Architecture Map
 
-> Last updated: 2026-02-27 (Post-Phase 17)
+> Last updated: 2026-02-28
 
 ---
 
@@ -123,7 +123,7 @@
 ├── src/                          ← React Frontend (Vite)
 │   ├── App.jsx                   ← Step router (Input → Gallery → Studio → Checkout)
 │   ├── components/
-│   │   ├── FactsInputForm.jsx    ← Step 1: Hobby/fact input
+│   │   ├── FactsInputForm.jsx    ← Step 1: Gift receiver story form (Name, Hobbies, Fun Fact, Occasion)
 │   │   ├── ConceptCardGrid.jsx   ← Step 2: 4 AI concept images
 │   │   ├── ThreeSceneViewer.jsx  ← Step 3: 3D Studio (polls status, loads STL)
 │   │   └── Checkout.jsx          ← Step 4: Order confirmation
@@ -208,7 +208,24 @@ CREATE TABLE Assets (
 
 ---
 
-## 6. Local Dev Startup Checklist (Definitive)
+## 6. Deployment URLs (Production)
+
+| Service | URL | Status |
+|---------|-----|--------|
+| **Frontend** | `https://3dmemoreez.pages.dev` | ✅ Live — Cloudflare Pages |
+| **Worker** | `https://3d-memoreez-orchestrator.walid-elleuch.workers.dev` | ✅ Live — Cloudflare Workers |
+
+**Deploying updates:**
+```powershell
+# Deploy frontend (or just git push — Cloudflare Pages auto-deploys)
+npm run build
+npx wrangler pages deploy dist --project-name 3dmemoreez
+
+# Deploy worker
+cd backend && npx wrangler deploy
+```
+
+## 7. Local Dev Startup Checklist
 
 **You only need 3 terminals.** The Worker runs on production — no wrangler dev needed.
 
@@ -223,7 +240,7 @@ npx localtunnel --port 8000 --subdomain 3dmemoreez-ai
 npm run dev
 ```
 
-**Frontend:** `http://localhost:5173`  
+**Frontend (local):** `http://localhost:5173`  
 **Worker:** `https://3d-memoreez-orchestrator.walid-elleuch.workers.dev` (always live, called directly)
 
 **To deploy Worker changes:** `cd backend && npx wrangler deploy`
