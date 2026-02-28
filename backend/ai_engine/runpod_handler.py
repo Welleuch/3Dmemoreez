@@ -108,6 +108,10 @@ def handler(job):
     # Validation
     if not pipeline or not vae:
         return {"error": "Model failed to load during cold start."}
+
+    if job_input.get("wakeup"):
+        logger.info("Wakeup ping received. Container is warm.")
+        return {"status": "success", "message": "Container is warm"}
     
     image_url = job_input.get("image_url")
     webhook_url = job_input.get("webhook_url")
@@ -185,9 +189,16 @@ def handler(job):
                 'asset_id': asset_id,
                 'status': 'completed'
             }
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
             try:
-                r = requests.post(webhook_url, data=data, files=files, timeout=30)
-                logger.info(f"Webhook response: {r.status_code}")
+                # Add headers to bypass WAF bot protection
+                r = requests.post(webhook_url, data=data, files=files, headers=headers, timeout=30)
+                logger.info(f"Webhook response status: {r.status_code}")
+                logger.info(f"Webhook response body: {r.text[:500]}")
+                if r.status_code != 200:
+                    logger.warning(f"Non-200 webhook response!")
             except Exception as w_err:
                 logger.error(f"Webhook failed: {w_err}")
                 return {"error": f"Webhook failed: {w_err}", "mesh_size": len(mesh_bytes)}

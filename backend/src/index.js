@@ -234,13 +234,19 @@ export default {
 
             // 3. AI Generation (Llama + Flux)
             if (url.pathname === "/api/generate" && request.method === "POST") {
-                const { hobbies } = await request.json();
+                const body = await request.json();
+                const { hobbies } = body;
+                let sessionId = body.session_id;
+                let isNewSession = false;
 
-                // Create a new session
-                const sessionId = crypto.randomUUID();
-                await env.DB.prepare(
-                    "INSERT INTO Sessions (id, hobbies_json, current_step) VALUES (?, ?, ?)"
-                ).bind(sessionId, JSON.stringify(hobbies), "selection").run();
+                if (!sessionId) {
+                    // Create a new session
+                    sessionId = crypto.randomUUID();
+                    isNewSession = true;
+                    await env.DB.prepare(
+                        "INSERT INTO Sessions (id, hobbies_json, current_step) VALUES (?, ?, ?)"
+                    ).bind(sessionId, JSON.stringify(hobbies), "selection").run();
+                }
 
                 // 3.1 Llama Prompt Orchestration
                 const systemPrompt = `You are an expert 3D Design Engineer specializing in Additive Manufacturing (FDM) and catchy, whimsical product design.
@@ -417,6 +423,42 @@ Structure:
                     throw new Error(firstError);
                 }
 
+                // 3.3 Pre-trigger (Wakeup) the 3D Engine for Phase 19 Cold-Start Optimization
+                if (isNewSession) {
+                    try {
+                        let AI_ENGINE_URL = env.RUNPOD_ENDPOINT_URL || env.AI_ENGINE_URL;
+                        if (!AI_ENGINE_URL && env.RUNPOD_ENDPOINT_ID) {
+                            AI_ENGINE_URL = `https://api.runpod.ai/v2/${env.RUNPOD_ENDPOINT_ID}/run`;
+                        }
+                        AI_ENGINE_URL = AI_ENGINE_URL || "http://127.0.0.1:8000/generate-3d";
+
+                        const IS_RUNPOD = AI_ENGINE_URL.includes("api.runpod.ai");
+                        const payload = IS_RUNPOD ? { input: { wakeup: true } } : { wakeup: true };
+
+                        const headers = {
+                            "Content-Type": "application/json",
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        };
+                        if (IS_RUNPOD && env.RUNPOD_API_KEY) {
+                            headers["Authorization"] = `Bearer ${env.RUNPOD_API_KEY}`;
+                        }
+
+                        console.log(`[WAKEUP] Sending pre-trigger ping to ${AI_ENGINE_URL}`);
+
+                        const wakeupPromise = fetch(AI_ENGINE_URL, {
+                            method: "POST",
+                            headers: headers,
+                            body: JSON.stringify(payload),
+                            signal: AbortSignal.timeout(5000) // Don't hang long
+                        }).then(r => r.text()).catch(e => console.error("[WAKEUP] Ping failed:", e.message));
+
+                        // Don't await, let it run in background
+                        ctx.waitUntil(wakeupPromise);
+                    } catch (err) {
+                        console.error("[WAKEUP] Pre-trigger logic error:", err);
+                    }
+                }
+
                 return new Response(JSON.stringify({
                     session_id: sessionId,
                     concepts: finalConcepts
@@ -429,15 +471,20 @@ Structure:
             if (url.pathname === "/api/session/select" && request.method === "POST") {
                 const { session_id, concept_id, image_url } = await request.json();
 
+                console.log(`[SELECT] Concept: ${concept_id}, Session: ${session_id}`);
+
                 // 1. Update Session Status in D1
-                await env.DB.prepare(
+                const res1 = await env.DB.prepare(
                     "UPDATE Sessions SET selected_concept_id = ?, current_step = 'view', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
                 ).bind(concept_id, session_id).run();
+                console.log(`[SELECT] Session update changes: ${res1.meta.changes}`);
 
                 // 2. Update Asset Status to 'processing'
-                await env.DB.prepare(
+                const res2 = await env.DB.prepare(
                     "UPDATE Assets SET status = 'processing' WHERE session_id = ? AND image_url LIKE ?"
                 ).bind(session_id, `%${concept_id}%`).run();
+                console.log(`[SELECT] Asset update changes: ${res2.meta.changes}`);
+
 
                 let AI_ENGINE_URL = env.RUNPOD_ENDPOINT_URL || env.AI_ENGINE_URL;
 
@@ -517,32 +564,44 @@ Structure:
 
             // 5. Webhook Listener (from RunPod/Local AI)
             if (url.pathname === "/api/webhook/runpod" && request.method === "POST") {
-                const formData = await request.formData();
-                const session_id = formData.get("session_id");
-                const asset_id = formData.get("asset_id");
-                const status = formData.get("status");
-                const file = formData.get("file");
+                try {
+                    const formData = await request.formData();
+                    const session_id = formData.get("session_id");
+                    const asset_id = formData.get("asset_id");
+                    const status = formData.get("status");
+                    const file = formData.get("file");
 
-                if (status === "completed" && file) {
-                    const stlKey = `models___${session_id}___${asset_id}.stl`;
+                    console.log(`[WEBHOOK] Received from AI Engine. Session: ${session_id}, Asset: ${asset_id}, Status: ${status}, HasFile: ${!!file}`);
 
-                    // Store STL in R2
-                    await env.ASSETS_BUCKET.put(stlKey, await file.arrayBuffer(), {
-                        httpMetadata: { contentType: "model/stl" }
-                    });
+                    if (status === "completed" && file) {
+                        const stlKey = `models___${session_id}___${asset_id}.stl`;
 
-                    // Update D1 - Stricter matching
-                    await env.DB.prepare(
-                        "UPDATE Assets SET status = 'completed', stl_r2_path = ? WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
-                    ).bind(stlKey, session_id, asset_id, `%${asset_id}%`).run();
+                        // Store STL in R2
+                        await env.ASSETS_BUCKET.put(stlKey, await file.arrayBuffer(), {
+                            httpMetadata: { contentType: "model/stl" }
+                        });
 
-                    return new Response("OK", { status: 200 });
-                } else {
-                    // Handle failure
-                    await env.DB.prepare(
-                        "UPDATE Assets SET status = 'failed' WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
-                    ).bind(session_id, asset_id, `%${asset_id}%`).run();
-                    return new Response("Failed", { status: 400 });
+                        console.log(`[WEBHOOK] Saved to R2: ${stlKey}`);
+
+                        // Update D1 - Stricter matching
+                        const d1Result = await env.DB.prepare(
+                            "UPDATE Assets SET status = 'completed', stl_r2_path = ? WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
+                        ).bind(stlKey, session_id, asset_id, `%${asset_id}%`).run();
+
+                        console.log(`[WEBHOOK] D1 Update Result:`, JSON.stringify(d1Result));
+
+                        return new Response("OK", { status: 200 });
+                    } else {
+                        console.warn(`[WEBHOOK] Failure status or missing file.`);
+                        // Handle failure
+                        await env.DB.prepare(
+                            "UPDATE Assets SET status = 'failed' WHERE session_id = ? AND (id = ? OR image_url LIKE ?)"
+                        ).bind(session_id, asset_id, `%${asset_id}%`).run();
+                        return new Response("Failed", { status: 400 });
+                    }
+                } catch (e) {
+                    console.error("[WEBHOOK] Exception processing webhook:", e.message, e.stack);
+                    return new Response("Internal Server Error", { status: 500 });
                 }
             }
 
