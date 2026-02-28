@@ -270,22 +270,23 @@ export default {
 
             // 3. AI Generation (Llama + Flux)
             if (url.pathname === "/api/generate" && request.method === "POST") {
-                const body = await request.json();
-                const { hobbies } = body;
-                let sessionId = body.session_id;
-                let isNewSession = false;
+                try {
+                    const body = await request.json();
+                    const { hobbies } = body;
+                    let sessionId = body.session_id;
+                    let isNewSession = false;
 
-                if (!sessionId) {
-                    // Create a new session
-                    sessionId = crypto.randomUUID();
-                    isNewSession = true;
-                    await env.DB.prepare(
-                        "INSERT INTO Sessions (id, hobbies_json, current_step) VALUES (?, ?, ?)"
-                    ).bind(sessionId, JSON.stringify(hobbies), "selection").run();
-                }
+                    if (!sessionId) {
+                        // Create a new session
+                        sessionId = crypto.randomUUID();
+                        isNewSession = true;
+                        await env.DB.prepare(
+                            "INSERT INTO Sessions (id, hobbies_json, current_step) VALUES (?, ?, ?)"
+                        ).bind(sessionId, JSON.stringify(hobbies), "selection").run();
+                    }
 
-                // 3.1 Llama Prompt Orchestration
-                const systemPrompt = `You are an expert 3D Design Engineer specializing in Additive Manufacturing (FDM) and catchy, whimsical product design.
+                    // 3.1 Llama Prompt Orchestration
+                    const systemPrompt = `You are an expert 3D Design Engineer specializing in Additive Manufacturing (FDM) and catchy, whimsical product design.
 Task: Convert hobbies into 4 distinct, "WOW-factor" image generation prompts for Flux Schnell.
 
 === THE "CATCHY" MANDATE — CRITICAL ===
@@ -348,160 +349,118 @@ Structure:
   ]
 }`;
 
-                const llamaResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        { role: "user", content: `User Hobbies: ${hobbies.join(", ")}` }
-                    ],
-                    max_tokens: 1536
-                });
+                    const llamaResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: `User Hobbies: ${hobbies.join(", ")}` }
+                        ],
+                        max_tokens: 1536
+                    });
 
-                // Extract JSON from Llama response
-                let result;
-                const content = llamaResponse.response;
-                try {
-                    // More robust parsing: find first { and last }
-                    const firstBrace = content.indexOf('{');
-                    const lastBrace = content.lastIndexOf('}');
-                    if (firstBrace === -1 || lastBrace === -1) {
-                        throw new Error("No JSON object found in response");
-                    }
-                    const jsonString = content.substring(firstBrace, lastBrace + 1);
-                    result = JSON.parse(jsonString);
-                } catch (e) {
-                    throw new Error(`Failed to parse Llama response into JSON. Raw response: ${content}`);
-                }
-
-                console.log("[LLAMA] Concepts generated:", JSON.stringify(result, null, 2));
-
-                // 3.2 Flux Image Generation (Parallel)
-                // Hard-coded suffix appended to every Flux prompt to guarantee white-background product shot and single geometric body
-                const FLUX_SUFFIX = ", 3D untextured clay render, ambient occlusion pass, solid matte gray geometric shape, single monolithic fused mass, pyramidal composition, no overhangs, no undercuts, Support-Free FDM design, completely monochrome, absence of any color, neutral gray pixels only, solid white background #FFFFFF, isolated floating object, no shadows, no scenery";
-
-                const generationPromises = result.concepts.map(async (concept) => {
+                    // Extract JSON from Llama response
+                    let result;
+                    const content = llamaResponse.response;
                     try {
-                        const finalPrompt = concept.prompt + FLUX_SUFFIX;
-                        console.log(`[FLUX] Prompt for "${concept.title}": ${finalPrompt.substring(0, 120)}...`);
-                        const fluxResponse = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
-                            prompt: finalPrompt,
-                        });
-
-                        if (!fluxResponse) {
-                            throw new Error("AI.run returned no data");
+                        // More robust parsing: find first { and last }
+                        const firstBrace = content.indexOf('{');
+                        const lastBrace = content.lastIndexOf('}');
+                        if (firstBrace === -1 || lastBrace === -1) {
+                            throw new Error("No JSON object found in response");
                         }
+                        const jsonString = content.substring(firstBrace, lastBrace + 1);
+                        result = JSON.parse(jsonString);
+                    } catch (e) {
+                        throw new Error(`Failed to parse Llama response into JSON. Raw response: ${content}`);
+                    }
 
-                        let binaryData;
+                    console.log("[LLAMA] Concepts generated:", JSON.stringify(result, null, 2));
 
-                        // 1. Check if it's already an acceptable binary type
-                        if (fluxResponse instanceof ArrayBuffer ||
-                            fluxResponse instanceof ReadableStream ||
-                            fluxResponse instanceof Blob ||
-                            (typeof Uint8Array !== 'undefined' && fluxResponse instanceof Uint8Array)) {
-                            binaryData = fluxResponse;
-                        }
-                        // 2. Check if it's a Response object
-                        else if (fluxResponse instanceof Response) {
-                            binaryData = await fluxResponse.arrayBuffer();
-                        }
-                        // 3. Check if it's a plain object with a base64 'image' property
-                        else if (typeof fluxResponse === 'object' && fluxResponse.image) {
-                            const base64String = fluxResponse.image;
-                            const binaryString = atob(base64String);
-                            const bytes = new Uint8Array(binaryString.length);
-                            for (let i = 0; i < binaryString.length; i++) {
-                                bytes[i] = binaryString.charCodeAt(i);
+                    // 3.2 Flux Image Generation (Parallel for maximum speed)
+                    const FLUX_SUFFIX = ", 3D untextured clay render, ambient occlusion pass, solid matte gray geometric shape, single monolithic fused mass, pyramidal composition, no overhangs, no undercuts, Support-Free FDM design, completely monochrome, absence of any color, neutral gray pixels only, solid white background #FFFFFF, isolated floating object, no shadows, no scenery";
+
+                    console.log(`[FLUX] Starting parallel generation for 4 concepts...`);
+
+                    const generationPromises = result.concepts.slice(0, 4).map(async (concept) => {
+                        try {
+                            const finalPrompt = concept.prompt + FLUX_SUFFIX;
+
+                            const fluxResponse = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
+                                prompt: finalPrompt,
+                                num_steps: 4
+                            });
+
+                            if (!fluxResponse) throw new Error("No data from Flux");
+
+                            let binaryData;
+                            if (fluxResponse instanceof ArrayBuffer || fluxResponse instanceof ReadableStream || fluxResponse instanceof Blob || (typeof Uint8Array !== 'undefined' && fluxResponse instanceof Uint8Array)) {
+                                binaryData = fluxResponse;
+                            } else if (fluxResponse instanceof Response) {
+                                binaryData = await fluxResponse.arrayBuffer();
+                            } else if (typeof fluxResponse === 'object' && fluxResponse.image) {
+                                const base64String = fluxResponse.image;
+                                const binaryString = atob(base64String);
+                                const bytes = new Uint8Array(binaryString.length);
+                                for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+                                binaryData = bytes.buffer;
+                            } else {
+                                binaryData = fluxResponse;
                             }
-                            binaryData = bytes.buffer;
+
+                            const assetId = crypto.randomUUID();
+                            const safeKey = `concepts___${sessionId}___${assetId}.png`;
+
+                            await env.ASSETS_BUCKET.put(safeKey, binaryData, {
+                                httpMetadata: { contentType: "image/png" }
+                            });
+
+                            return {
+                                id: assetId,
+                                url: `${url.origin}/api/assets/${safeKey}`,
+                                safeKey: safeKey, // Store key for batch DB
+                                title: concept.title,
+                                type: concept.type,
+                                score: Math.floor(Math.random() * 15) + 80
+                            };
+                        } catch (err) {
+                            console.error(`[FLUX] Parallel task failed for ${concept.title}:`, err.message);
+                            throw err;
                         }
-                        // 4. Check for .arrayBuffer() method
-                        else if (typeof fluxResponse.arrayBuffer === 'function') {
-                            binaryData = await fluxResponse.arrayBuffer();
-                        }
-                        // 5. Fallback
-                        else {
-                            binaryData = fluxResponse;
-                        }
+                    });
 
-                        const assetId = crypto.randomUUID();
-                        const safeKey = `concepts___${sessionId}___${assetId}.png`;
+                    const generationResults = await Promise.allSettled(generationPromises);
 
-                        // Store binaryData directly in R2 (Removed bg-removal for stability)
-                        await env.ASSETS_BUCKET.put(safeKey, binaryData, {
-                            httpMetadata: { contentType: "image/png" }
-                        });
+                    const finalConcepts = generationResults
+                        .filter(res => res.status === 'fulfilled')
+                        .map(res => res.value);
 
-                        // Store in D1
-                        await env.DB.prepare(
-                            "INSERT INTO Assets (session_id, image_url) VALUES (?, ?)"
-                        ).bind(sessionId, `/api/assets/${safeKey}`).run();
-
-                        return {
-                            id: assetId,
-                            url: `${url.origin}/api/assets/${safeKey}`,
-                            title: concept.title,
-                            type: concept.type,
-                            score: Math.floor(Math.random() * 15) + 80
-                        };
-                    } catch (err) {
-                        console.error(`Generation failed for ${concept.title}:`, err);
-                        throw new Error(`Flux failed for ${concept.title}: ${err.message}`);
+                    if (finalConcepts.length === 0) {
+                        const firstError = generationResults.find(res => res.status === 'rejected')?.reason?.message || "Generation failed";
+                        throw new Error(firstError);
                     }
-                });
 
-                const generationResults = await Promise.allSettled(generationPromises);
-
-                const finalConcepts = generationResults
-                    .filter(res => res.status === 'fulfilled')
-                    .map(res => res.value);
-
-                if (finalConcepts.length === 0) {
-                    const firstError = generationResults.find(res => res.status === 'rejected')?.reason?.message || "All image generation attempts failed due to safety filters.";
-                    throw new Error(firstError);
-                }
-
-                // 3.3 Pre-trigger (Wakeup) the 3D Engine for Phase 19 Cold-Start Optimization
-                if (isNewSession) {
-                    try {
-                        let AI_ENGINE_URL = env.RUNPOD_ENDPOINT_URL || env.AI_ENGINE_URL;
-                        if (!AI_ENGINE_URL && env.RUNPOD_ENDPOINT_ID) {
-                            AI_ENGINE_URL = `https://api.runpod.ai/v2/${env.RUNPOD_ENDPOINT_ID}/run`;
-                        }
-                        AI_ENGINE_URL = AI_ENGINE_URL || "http://127.0.0.1:8000/generate-3d";
-
-                        const IS_RUNPOD = AI_ENGINE_URL.includes("api.runpod.ai");
-                        const payload = IS_RUNPOD ? { input: { wakeup: true } } : { wakeup: true };
-
-                        const headers = {
-                            "Content-Type": "application/json",
-                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                        };
-                        if (IS_RUNPOD && env.RUNPOD_API_KEY) {
-                            headers["Authorization"] = `Bearer ${env.RUNPOD_API_KEY}`;
-                        }
-
-                        console.log(`[WAKEUP] Sending pre-trigger ping to ${AI_ENGINE_URL}`);
-
-                        const wakeupPromise = fetch(AI_ENGINE_URL, {
-                            method: "POST",
-                            headers: headers,
-                            body: JSON.stringify(payload),
-                            signal: AbortSignal.timeout(5000) // Don't hang long
-                        }).then(r => r.text()).catch(e => console.error("[WAKEUP] Ping failed:", e.message));
-
-                        // Don't await, let it run in background
-                        ctx.waitUntil(wakeupPromise);
-                    } catch (err) {
-                        console.error("[WAKEUP] Pre-trigger logic error:", err);
+                    // Batch DB Update (Much faster)
+                    const dbBatch = finalConcepts.map(c =>
+                        env.DB.prepare("INSERT INTO Assets (session_id, image_url, title, type) VALUES (?, ?, ?, ?)").bind(sessionId, `/api/assets/${c.safeKey}`, c.title, c.type)
+                    );
+                    if (dbBatch.length > 0) {
+                        ctx.waitUntil(env.DB.batch(dbBatch).catch(e => console.error("Batch DB Fail:", e)));
                     }
-                }
 
-                return new Response(JSON.stringify({
-                    session_id: sessionId,
-                    concepts: finalConcepts
-                }), {
-                    headers: { ...corsHeaders, "Content-Type": "application/json" },
-                });
+                    return new Response(JSON.stringify({
+                        session_id: sessionId,
+                        concepts: finalConcepts
+                    }), {
+                        headers: { ...corsHeaders, "Content-Type": "application/json" },
+                    });
+                } catch (err) {
+                    console.error("[GENERATE] Global Error:", err);
+                    return new Response(JSON.stringify({ error: err.message }), {
+                        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+                    });
+                }
             }
+
+
 
             // 4. Handle Concept Selection & Trigger 3D Gen
             if (url.pathname === "/api/session/select" && request.method === "POST") {

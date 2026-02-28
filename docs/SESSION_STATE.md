@@ -1,36 +1,35 @@
 # 3Dmemoreez — Session State
 # For handoff to a new chat session
 
-> Last updated: 2026-02-26
+> Last updated: 2026-02-28
 > ⚠️ For recurring bugs and their fixes, see: **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)**
 
 ---
 
-## 🏆 Current Milestone: DfAM Printability & Slicing Integration Complete ✅
+## 🏆 Current Milestone: AI Generation Speed Optimization (WIP) 🚧
 
-The 3D pipeline is now "Production Hardened." AI prompts strictly follow Additive Manufacturing (AM) rules, and the Slicer-to-Checkout flow is fully integrated with actual material math.
+Attempted to restore the "blink-of-an-eye" AI generation speed for the initial image generation and the "Explore More" function. While several backend bottlenecks were resolved, the Cloudflare AI `flux-1-schnell` parallel execution is still resulting in intermittent 120-second timeout errors (`AiError: 3046: Request timeout`) and slow subjective response times.
 
-**Previous milestone (2026-02-26):** Manifold Geometry Studio & Payment Logic.
+**Previous milestone (2026-02-26):** DfAM Printability & Slicing Integration Complete
 
 ---
 
-## ✅ What Works Right Now (Complete Feature Set)
+## ✅ What Works Right Now (Recent Changes)
 
-1. **Full pipeline end-to-end:** Hobbies → Llama → Flux × 4 → 3D Model → Studio (Rounded Engraving) → Real Slicing → Checkout (EUR sync).
-2. **DfAM Prompt Engineering:** High-stability prompts using "CNC carving" metaphors to ensure monolithic, single-object, monochrome outputs optimized for FDM printing.
-3. **Automated Slicing & Pricing:** Real-time G-code generation with material mass calculation (PLA) and accurate pricing feedback.
-4. **High-Stability CSG:** Browser-side geometry merging uses `.toNonIndexed()` and strict attribute filtering (position/normal) to prevent crashes.
-5. **Rounded Safety Pedestal:** Custom `LatheGeometry`-based cylinder with rounded edges for physical safety and premium aesthetics.
-6. **Stable Geometry Viewer:** Prevented "exploding spikes" and disappearing models by implementing safe-centering and geometry cloning (read-only cache protection).
-7. **Sync'd Payment Engine:** Backend Cloudflare Worker now correctly handles **EUR (€)** transactions with a **3.90€** shipping fee, matching the frontend UI exactly.
-8. **Stable Loopback:** Shifted away from fragile localtunnels for internal AI/Slicer communication to guarantee reliability during development.
-9. **Optimized Infrastructure:** Both AI Engine (GPU) and Slicer (CPU) images refactored for **headless production performance**, with pre-baked models and build-time AppImage extraction.
+1. **Background Database Caching:** Changed `env.DB.prepare` calls during the image generation loop to a single `env.DB.batch()` inside `ctx.waitUntil(...)`. This removes database write latency from the user's waiting time.
+2. **D1 Schema Update:** Altered the `Assets` table on both `--local` and `--remote` D1 databases to add `title`, `type`, and `score` columns. This fixes a `SQLITE_ERROR` that was previously crashing the background batch saving.
+3. **Llama Prompt Trimming:** Hardcapped Llama `max_tokens` to 800 and removed historical-analysis instructions (the `varietyHint`) to prevent the LLM from getting stuck thinking during the "Explore More" phase.
+4. **Flux Rate Limiting Parameter:** Added `num_steps: 4` to the `@cf/black-forest-labs/flux-1-schnell` request body in a bid to force Cloudflare to generate imagery as fast as mathematically possible.
 
 ---
 
 ## ⚠️ Known Limitations / Open Issues
 
-### Issue 1 — Resend Sandbox
+### Issue 1 — Cloudflare AI Generation Timeout
+**Problem:** The `Promise.allSettled()` block that triggers 4 parallel Flux generations is still intermittently taking over 120 seconds, causing Cloudflare Workers to terminate the request with a `500` timeout. "Explore More" is often subjectively slower than older versions of the app.
+**Status:** Requires a massive architecture change (e.g., streaming responses, moving generation off-worker, or abandoning parallel generation for queue-based generation).
+
+### Issue 2 — Resend Sandbox
 **Problem:** Emails only deliver to the owner (`walid.elleuch@outlook.de`) until the domain `3dmemoreez.com` is verified.
 **Status:** Verification pending domain purchase.
 
@@ -40,23 +39,20 @@ The 3D pipeline is now "Production Hardened." AI prompts strictly follow Additiv
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `src/lib/csgEngine.js` | BVH-CSG Engine | ✅ Rounded Pedestal + .toNonIndexed fix |
-| `src/components/ThreeSceneViewer.jsx` | 3D Studio UI | ✅ Safe Centering + Debounced Engraving |
-| `backend/src/index.js` | Orchestrator | ✅ EUR/Shipping Fee sync |
-| `src/components/Checkout.jsx` | Payment UI | ✅ EUR currency display |
+| `backend/src/index.js` | Orchestrator | 🚧 "Explore More" speed is slow; requires major refactoring |
+| `docs/SESSION_STATE.md` | Session Docs | ✅ Updated |
 
 ---
 
 ## 🚀 Next Steps (Priority Order)
 
-### 🔴 Priority 1 — Production Deployment (RunPod/Cloudflare)
-- [x] Optimize AI Engine Docker image for < 30s cold start on RunPod Serverless.
-- [ ] Deploy the optimized AI Engine to RunPod and integrate the Endpoint ID into the Worker.
-- [ ] Deploy Slicer as a Cloudflare Container for co-located processing.
+### 🔴 Priority 1 — Solve Slow Image Generation Catastrophe
+- [ ] Completely rethink the `generate` endpoint in the Cloudflare Worker.
+- [ ] Investigate if we should switch to Server-Sent Events (SSE) stream returning images 1-by-1 as they load instead of waiting for all 4.
+- [ ] Profile the exact time Llama takes vs Flux takes.
 
 ### 🟡 Priority 2 — Analytics & UX
 - [ ] Implement post-payment conversion tracking.
-- [ ] Add loading skeletons for the 3D model generation phase.
 
 ---
 
