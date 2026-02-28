@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
+    "preview": "npm run build && wrangler dev",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:ai": "cd backend/ai_engine && pytest",
-    "test:slicer": "cd backend/slicer && pytest"
+    "test:slicer": "cd backend/slicer && pytest",
+    "deploy": "npm run build && wrangler deploy"
   },
   "keywords": [],
   "author": "",
@@ -41,6 +42,7 @@
     "vite": "^7.3.1"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.25.6",
     "@playwright/test": "^1.49.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
@@ -53,6 +55,7 @@
     "msw": "^2.7.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "wrangler": "^4.69.0"
   }
 }
