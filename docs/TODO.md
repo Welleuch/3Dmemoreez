@@ -317,3 +317,9 @@
 
 ## Phase 21: Bug Fixes and Optimization — ✅ COMPLETE (2026-02-28)
 * [x] **Webhook Fix:** Fixed the issue where Cloudflare WAF natively blocked the incoming Runpod `requests.post` webhook payload. Resolved by passing a valid browser `User-Agent`.
+
+## Phase 22: AI Speed Optimization (In Progress) 🚧
+* [x] **Background DB Operations:** Moved D1 batch inserts to `ctx.waitUntil` to prevent them from blocking the HTTP response.
+* [x] **Prompt Trimming:** Shortened Llama prompt to reduce token generation time and removed instructions that cause it to hang during "Explore More".
+* [x] **Database Schema Update:** Added `title`, `type`, and `score` columns to `Assets` table to fix a background batch save crash.
+* [ ] **Architecture Overhaul:** Investigate moving away from `Promise.allSettled` to a streaming (SSE) or queue-based architecture to resolve Cloudflare `AiError: 3046: Request timeout` issues when generating 4 parallel Flux concepts.

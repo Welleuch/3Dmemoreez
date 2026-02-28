@@ -340,3 +340,22 @@ Invoke-RestMethod https://3d-memoreez-orchestrator.walid-elleuch.workers.dev/api
 Invoke-RestMethod https://3dmemoreez-ai.loca.lt/health
 # Expected: {"status":"ok","gpu":true,"import_success":true}
 ```
+
+---
+
+## ❌ Error 13 — Cloudflare Worker Timeouts / `AiError: 3046`
+
+### Symptom
+When generating initial concept images or clicking "Explore More Concepts", the request spins for ~2 minutes and fails with a `500` error. Cloudflare logs show:
+```
+AiError: 3046: Request timeout
+```
+
+### Root Cause
+The `/api/generate` endpoint runs 4 Flux generations in parallel using `Promise.allSettled()`. If the Cloudflare AI pipeline gets busy, executing 4 diffusion models simultaneously takes longer than the internal Worker API limits, and the gateway forcefully cuts the connection. 
+
+### ✅ Current Workarounds & Fixes Let to Attempt
+1. **Llama Speedup:** The system prompt for Llama 3 was clamped (max_tokens: 800) to ensure the LLM step happens near-instantly, leaving more time for Flux.
+2. **Background Inserts:** Writing the 4 images to the D1 database and generating R2 paths is now offloaded to `ctx.waitUntil(...)` so that database latency doesn't add to the wait time.
+3. **Database Schema Fix:** Added required columns (`title`, `type`, `score`) to `Assets` table so the background `batch()` insert doesn't fatally crash with `SQLITE_ERROR`.
+4. **The Ultimate Fix (Pending):** If this continues, the Worker shouldn't try to generate 4 images synchronously. It must be refactored to use Server-Sent Events (SSE) to stream images to the frontend as they finish, bypassing the 120-second hard timeout.
