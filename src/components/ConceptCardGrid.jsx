@@ -1,7 +1,17 @@
+import { useEffect } from 'react';
 import { ChevronLeft, CheckCircle2, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://127.0.0.1:8787'
+    : 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev';
+
 export default function ConceptCardGrid({ concepts, onSelect, onBack, onGenerateMore, isGenerating }) {
+    // Proactive GPU Warmup when the user lands on the concept selection page
+    useEffect(() => {
+        fetch(`${API_BASE_URL}/api/warmup`, { method: "POST" }).catch(() => { });
+    }, []);
+
     return (
         <div className="w-full max-w-6xl mx-auto px-4 py-8 md:py-16">
             <div className="text-center mb-16 md:mb-24">

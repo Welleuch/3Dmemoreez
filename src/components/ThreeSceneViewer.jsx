@@ -8,8 +8,8 @@ import {
 } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
 import * as THREE from 'three';
-import { ChevronLeft, ArrowRight, Type, Box, Zap, Loader2, Printer, Sparkles, Gauge } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { ChevronLeft, ArrowRight, Type, Box, Zap, Loader2, Printer, Sparkles, Gauge, Info } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://127.0.0.1:8787'
@@ -17,6 +17,16 @@ const API_BASE_URL = window.location.hostname === 'localhost' || window.location
 
 import { createEngravedPedestalCSG } from '../lib/csgEngine';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter';
+
+// --- CONFIG & CONSTANTS ---
+const FUN_FACTS = [
+    "Your sculpture is being carved from over 800,000 digital voxels.",
+    "The AI runs 50 diffusion steps to capture every detail of your concept.",
+    "No two models are identical – this geometry is unique to your gift.",
+    "Your 3D blueprint will contain roughly 200,000 precise triangles.",
+    "Real master sculptors take weeks; our AI does it in under a minute.",
+    "Calculated precision: 0.125mm for maximum print quality."
+];
 
 function createRoundedCylinderGeometry(radius, height, bevel, segments = 64) {
     const points = [];
@@ -37,19 +47,70 @@ function createRoundedCylinderGeometry(radius, height, bevel, segments = 64) {
     return new THREE.LatheGeometry(points, segments);
 }
 
-function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged }) {
+// Separate component for the fun facts to avoid re-rendering the whole UI too often
+function FunFactsLoader({ progress }) {
+    const [factIndex, setFactIndex] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setFactIndex(prev => (prev + 1) % FUN_FACTS.length);
+        }, 6000);
+        return () => clearInterval(interval);
+    }, []);
+
+    return (
+        <div className="flex flex-col items-center gap-6 p-10 bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-sm text-center">
+            <div className="relative">
+                <div className="w-20 h-20 border-4 border-slate-100 border-t-primary rounded-full animate-spin" />
+                <Sparkles className="absolute inset-0 m-auto w-8 h-8 text-primary animate-pulse" />
+            </div>
+            <div className="min-h-[80px]">
+                <h3 className="text-xl font-semibold text-slate-800 mb-2">
+                    {progress < 30 ? "Analyzing Vision..." :
+                        progress < 60 ? "Sculpting Geometry..." :
+                            progress < 90 ? "Finalizing 3D Blueprint..." :
+                                "Polishing Details..."}
+                </h3>
+                <AnimatePresence mode="wait">
+                    <motion.p
+                        key={factIndex}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        className="text-sm text-slate-500 italic"
+                    >
+                        "{FUN_FACTS[factIndex]}"
+                    </motion.p>
+                </AnimatePresence>
+            </div>
+            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-4">
+                <div
+                    className="h-full bg-primary transition-all duration-700 ease-out"
+                    style={{ width: `${progress}%` }}
+                />
+            </div>
+        </div>
+    );
+}
+
+function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged, isolationMode = false }) {
     const [geometry, setGeometry] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
 
-    // Compute local bounds for consistent positioning between fallback and CSG
+    // Compute local bounds
     const localBounds = useMemo(() => {
+        if (isolationMode) {
+            // Default bounds for a 2x2x4 object during isolation config
+            const b = new THREE.Box3(new THREE.Vector3(-1, 0, -1), new THREE.Vector3(1, 4, 1));
+            return b;
+        }
         if (!modelMesh) return modelBounds;
         modelMesh.geometry.computeBoundingBox();
         return modelMesh.geometry.boundingBox;
-    }, [modelMesh, modelBounds]);
+    }, [modelMesh, modelBounds, isolationMode]);
 
     useEffect(() => {
-        if (!modelMesh || !localBounds) return;
+        if (!localBounds) return;
 
         let active = true;
         async function init() {
@@ -62,7 +123,7 @@ function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged }) {
                 const p = Math.max(0.35, size.x * 0.12);
 
                 const csgGeom = await createEngravedPedestalCSG(
-                    modelMesh,
+                    isolationMode ? null : modelMesh,
                     localBounds,
                     line1,
                     line2,
@@ -81,21 +142,16 @@ function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged }) {
             }
         }
 
-        const timer = setTimeout(init, 300); // Updated to 300ms as per TODO
-        return () => {
-            active = false;
-            clearTimeout(timer);
-        };
-    }, [modelMesh, localBounds, line1, line2]);
+        const timer = setTimeout(init, 300);
+        return () => { active = false; clearTimeout(timer); };
+    }, [modelMesh, localBounds, line1, line2, isolationMode]);
 
-    // Fallback display logic
     const size = new THREE.Vector3();
     if (localBounds) localBounds.getSize(size);
     const boxH = Math.max(0.35, size.y * 0.08);
-    const radius = Math.max(size.x, size.z) / 2 + 0.35; // Synced with CSG padding
+    const radius = Math.max(size.x, size.z) / 2 + 0.35;
     const centerX = localBounds ? (localBounds.min.x + localBounds.max.x) / 2 : 0;
     const centerZ = localBounds ? (localBounds.min.z + localBounds.max.z) / 2 : 0;
-    // Overlap adjusted to 0.05 as per TODO
     const centerY = localBounds ? localBounds.min.y + 0.05 - boxH / 2 : 0;
 
     const roundedCylinderFallback = useMemo(() => createRoundedCylinderGeometry(radius, boxH, 0.05), [radius, boxH]);
@@ -104,19 +160,11 @@ function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged }) {
         <group>
             {geometry ? (
                 <mesh geometry={geometry} receiveShadow castShadow>
-                    <meshStandardMaterial
-                        color="#e5e7eb"
-                        roughness={0.3}
-                        metalness={0.4}
-                    />
+                    <meshStandardMaterial color="#e5e7eb" roughness={0.3} metalness={0.4} />
                 </mesh>
             ) : (
                 <mesh position={[centerX, centerY, centerZ]} receiveShadow castShadow geometry={roundedCylinderFallback}>
-                    <meshStandardMaterial
-                        color="#e5e7eb"
-                        roughness={0.3}
-                        metalness={0.4}
-                    />
+                    <meshStandardMaterial color="#e5e7eb" roughness={0.3} metalness={0.4} />
                 </mesh>
             )}
 
@@ -135,6 +183,7 @@ function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged }) {
 function AIModel({ url, onLoaded }) {
     const geom = useLoader(STLLoader, url);
     const meshRef = useRef();
+    const [revealProgress, setRevealProgress] = useState(0);
 
     useEffect(() => {
         if (geom) {
@@ -143,47 +192,56 @@ function AIModel({ url, onLoaded }) {
             const center = new THREE.Vector3();
             geom.boundingBox.getCenter(center);
 
-            // Shift geometry so the bottom is exactly at Y=0 
-            // and the object is centered on the X and Z axes.
-            // BUGFIX: Check if already centered to avoid cumulative translation on remount
             if (Math.abs(center.x) > 0.001 || Math.abs(min.y) > 0.001 || Math.abs(center.z) > 0.001) {
-                console.log("[STUDIO] Centering figurine geometry...");
                 geom.translate(-center.x, -min.y, -center.z);
                 geom.computeBoundingBox();
             }
 
-            if (onLoaded) {
-                onLoaded(geom.boundingBox, meshRef.current);
-            }
+            if (onLoaded) onLoaded(geom.boundingBox, meshRef.current);
+
+            // Trigger landing animation
+            setRevealProgress(0);
         }
-    }, [geom, url]); // url change should re-trigger this
+    }, [geom, url]);
+
+    useFrame((state) => {
+        if (meshRef.current) {
+            if (revealProgress < 1) {
+                setRevealProgress(prev => Math.min(prev + 0.02, 1));
+            }
+            // Figurine "lands" from above (Y: 2.0 -> 0.0)
+            meshRef.current.position.y = THREE.MathUtils.lerp(2, 0, revealProgress);
+            meshRef.current.material.opacity = revealProgress;
+            meshRef.current.material.transparent = true;
+        }
+    });
 
     return (
         <mesh ref={meshRef} geometry={geom} castShadow receiveShadow>
-            <meshStandardMaterial
-                color="#e5e7eb"
-                roughness={0.3}
-                metalness={0.4}
-            />
+            <meshStandardMaterial color="#e5e7eb" roughness={0.3} metalness={0.4} />
         </mesh>
     );
 }
 
 export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, setLine1, line2, setLine2, onNext, onBack }) {
-    const [isFinalizing, setIsFinalizing] = useState(false);
+    // UI Stages: 'PEDESTAL_STUDIO' or 'MODEL_PREVIEW'
+    const [uiStage, setUiStage] = useState('PEDESTAL_STUDIO');
+    const [isTransitioning, setIsTransitioning] = useState(false);
+
     const [status, setStatus] = useState('processing');
     const [stlUrl, setStlUrl] = useState(null);
     const [modelData, setModelData] = useState({ bounds: null, mesh: null });
     const [mergedGeometry, setMergedGeometry] = useState(null);
 
     // Pre-slicing states
-    const [bgJobId, setBgJobId] = useState(null);
-    const [bgJobStatus, setBgJobStatus] = useState("IDLE"); // IDLE, UPLOADING, SLICING, POLLING, COMPLETED, FAILED
+    const [isFinalizing, setIsFinalizing] = useState(false);
+    const [bgJobStatus, setBgJobStatus] = useState("IDLE");
     const [bgJobResult, setBgJobResult] = useState(null);
 
-    // Mesh Gen progress (fake but engaging)
+    // Mesh Gen progress
     const [meshProgress, setMeshProgress] = useState(0);
 
+    // Silent Polling for Mesh
     useEffect(() => {
         if (status === 'completed' || status === 'failed') return;
         const poll = async () => {
@@ -191,8 +249,6 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
                 const assetIdParam = selectedConcept?.id ? `&asset_id=${selectedConcept.id}` : '';
                 const resp = await fetch(`${API_BASE_URL}/api/session/status?session_id=${sessionId}${assetIdParam}`);
                 const data = await resp.json();
-
-                // Find the specific asset we are waiting for
                 const currentAsset = data.assets?.find(a => a.id === selectedConcept?.id || a.image_url.includes(selectedConcept?.id));
 
                 if (currentAsset?.status === 'completed' && currentAsset.stl_r2_path) {
@@ -202,60 +258,57 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
                 } else if (currentAsset?.status === 'failed') {
                     setStatus('failed');
                 } else {
-                    // Slowly increment progress up to 95% while waiting
-                    setMeshProgress(prev => Math.min(prev + (Math.random() * 5), 95));
+                    setMeshProgress(prev => Math.min(prev + (Math.random() * 3), 95));
                 }
             } catch (err) { console.error("Polling error:", err); }
         };
         const interval = setInterval(poll, 3000);
         return () => clearInterval(interval);
-    }, [sessionId, status]);
+    }, [sessionId, status, selectedConcept?.id]);
+
+    // Handle Stage Transition
+    const handleConfirmEngraving = () => {
+        if (status === 'completed') {
+            setUiStage('MODEL_PREVIEW');
+        } else {
+            setIsTransitioning(true);
+        }
+    };
+
+    // Auto-advance if we were waiting for the GPU
+    useEffect(() => {
+        if (isTransitioning && status === 'completed') {
+            setIsTransitioning(false);
+            setUiStage('MODEL_PREVIEW');
+        }
+    }, [isTransitioning, status]);
 
     // Background Pre-Slicing Logic
     useEffect(() => {
-        if (!mergedGeometry || !selectedConcept) return;
-
-        console.log("[PRE-SLICE] Geometry updated, starting background slice in 1.5 seconds...");
-        setBgJobId(null);
-        setBgJobStatus("IDLE");
-        setBgJobResult(null);
+        if (!mergedGeometry || !selectedConcept || uiStage !== 'MODEL_PREVIEW') return;
 
         let isMounted = true;
         let pollInterval = null;
 
-        // Debounce the pre-slice slightly in case of rapid text updates
         const timeoutId = setTimeout(async () => {
             try {
                 setBgJobStatus("UPLOADING");
-
-                // 1. Export
                 const exporter = new STLExporter();
                 const mesh = new THREE.Mesh(mergedGeometry, new THREE.MeshStandardMaterial());
                 const stlData = exporter.parse(mesh, { binary: true });
-
-                // 2. Upload
                 const formData = new FormData();
                 formData.append("file", new Blob([stlData], { type: "model/stl" }), "final_merged.stl");
                 formData.append("session_id", sessionId);
                 formData.append("asset_id", selectedConcept.id);
 
-                const uploadResp = await fetch(`${API_BASE_URL}/api/assets/upload-final`, {
-                    method: "POST",
-                    body: formData
-                });
-
+                const uploadResp = await fetch(`${API_BASE_URL}/api/assets/upload-final`, { method: "POST", body: formData });
                 if (!uploadResp.ok) throw new Error("Upload failed");
                 if (!isMounted) return;
 
-                // 3. Trigger Slicer
                 setBgJobStatus("SLICING");
                 const resp = await fetch(`${API_BASE_URL}/api/slice`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        session_id: sessionId,
-                        asset_id: selectedConcept.id
-                    })
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: sessionId, asset_id: selectedConcept.id })
                 });
 
                 if (!resp.ok) throw new Error("Slice trigger failed");
@@ -263,29 +316,22 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
                 if (!isMounted) return;
 
                 if (initialResult.job_id) {
-                    setBgJobId(initialResult.job_id);
                     setBgJobStatus("POLLING");
-
                     pollInterval = setInterval(async () => {
                         try {
                             const statusResp = await fetch(`${API_BASE_URL}/api/slice/status?job_id=${initialResult.job_id}&session_id=${sessionId}&asset_id=${selectedConcept.id}`);
                             if (!statusResp.ok) return;
-
                             const statusData = await statusResp.json();
                             if (!isMounted) return;
-
                             if (statusData.status === "COMPLETED" || statusData.success) {
                                 clearInterval(pollInterval);
-                                console.log("[PRE-SLICE] Completed successfully in background!");
                                 setBgJobStatus("COMPLETED");
                                 setBgJobResult(statusData);
                             } else if (statusData.status === "FAILED") {
                                 clearInterval(pollInterval);
                                 setBgJobStatus("FAILED");
                             }
-                        } catch (e) {
-                            // Silently ignore poll errors
-                        }
+                        } catch (e) { }
                     }, 3000);
                 } else if (initialResult.status === "success" || initialResult.success) {
                     setBgJobStatus("COMPLETED");
@@ -297,74 +343,38 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
             }
         }, 1500);
 
-        return () => {
-            isMounted = false;
-            clearTimeout(timeoutId);
-            if (pollInterval) clearInterval(pollInterval);
-        };
-    }, [mergedGeometry, selectedConcept?.id, sessionId]);
+        return () => { isMounted = false; clearTimeout(timeoutId); if (pollInterval) clearInterval(pollInterval); };
+    }, [mergedGeometry, selectedConcept?.id, sessionId, uiStage]);
 
     const handleFinalize = async () => {
         if (!mergedGeometry) return;
-
-        // If background slice already finished, proceed instantly!
         if (bgJobStatus === "COMPLETED" && bgJobResult) {
-            console.log("[FINALIZE] Using pre-sliced result!");
-            onNext({
-                sessionId: sessionId,
-                printEstimate: bgJobResult.stats,
-                line1,
-                line2,
-                stlUrl,
-                gcode_r2_path: bgJobResult.gcode_r2_path
-            });
+            onNext({ sessionId, printEstimate: bgJobResult.stats, line1, line2, stlUrl, gcode_r2_path: bgJobResult.gcode_r2_path });
             return;
         }
-
-        if (bgJobStatus === "FAILED") {
-            alert("Slicing failed formatting the geometry. Please adjust text slightly and try again.");
-            return;
-        }
-
-        // Otherwise, show the dynamic loading modal while the background job finishes
+        if (bgJobStatus === "FAILED") { alert("Slicing failed. Please adjust text slightly."); return; }
         setIsFinalizing(true);
     };
 
-    // Watch for bg job completion while the finalizing modal is open
+    // Watch for bg job completion during finalization
     useEffect(() => {
         if (isFinalizing && bgJobStatus === "COMPLETED" && bgJobResult) {
             setIsFinalizing(false);
-            onNext({
-                sessionId: sessionId,
-                printEstimate: bgJobResult.stats,
-                line1,
-                line2,
-                stlUrl,
-                gcode_r2_path: bgJobResult.gcode_r2_path
-            });
-        }
-        if (isFinalizing && bgJobStatus === "FAILED") {
-            setIsFinalizing(false);
-            alert("Slicing failed. Please adjust text and try again.");
+            onNext({ sessionId, printEstimate: bgJobResult.stats, line1, line2, stlUrl, gcode_r2_path: bgJobResult.gcode_r2_path });
         }
     }, [isFinalizing, bgJobStatus, bgJobResult, sessionId, line1, line2, stlUrl, onNext]);
-
-    const [isMerged, setIsMerged] = useState(false);
-    const [hasPositioned, setHasPositioned] = useState(false);
-
-    // Reset states when asset changes
-    useEffect(() => {
-        setIsMerged(false);
-        setHasPositioned(false);
-    }, [selectedConcept?.id]);
 
     return (
         <div className="w-full max-w-7xl mx-auto px-4 animate-fade-in py-8">
             <div className="flex flex-col gap-8 md:gap-12">
                 <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="text-center md:text-left">
-                        <span className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400 mb-2 block">Stage 03 • 3D Studio</span>
-                        <h2 className="text-3xl md:text-5xl font-light tracking-tight text-slate-800">{selectedConcept?.title}</h2>
+                        <span className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400 mb-2 block">
+                            Stage 03 • {uiStage === 'PEDESTAL_STUDIO' ? 'Custom Engraving' : '3D Revelations'}
+                        </span>
+                        <h2 className="text-3xl md:text-5xl font-light tracking-tight text-slate-800">
+                            {uiStage === 'PEDESTAL_STUDIO' ? 'Design Your Base' : 'The Result'}
+                        </h2>
                     </div>
                     <button
                         onClick={onBack}
@@ -380,29 +390,17 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
                         <Canvas shadows gl={{ antialias: true, alpha: true }}>
                             <PerspectiveCamera makeDefault position={[5, 5, 5]} fov={35} />
                             <color attach="background" args={['#f8fafc']} />
-
                             <ambientLight intensity={0.5} />
                             <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1.5} castShadow />
                             <pointLight position={[-10, -10, -10]} intensity={0.5} color="#8b5cf6" />
-
                             <Suspense fallback={null}>
-                                <Stage
-                                    environment="city"
-                                    intensity={0.6}
-                                    contactShadow={{ opacity: 0.4, blur: 2 }}
-                                    adjustCamera={!hasPositioned}
-                                    center={false}
-                                >
-                                    {status === 'completed' && stlUrl && (
+                                <Stage environment="city" intensity={0.6} contactShadow={{ opacity: 0.4, blur: 2 }} adjustCamera={true} center={false}>
+                                    {uiStage === 'PEDESTAL_STUDIO' ? (
+                                        <Pedestal line1={line1} line2={line2} isolationMode={true} />
+                                    ) : (
                                         <group>
-                                            {!isMerged && (
-                                                <AIModel
-                                                    url={stlUrl}
-                                                    onLoaded={(bounds, mesh) => {
-                                                        setModelData({ bounds, mesh });
-                                                        setHasPositioned(true);
-                                                    }}
-                                                />
+                                            {stlUrl && (
+                                                <AIModel url={stlUrl} onLoaded={(bounds, mesh) => setModelData({ bounds, mesh })} />
                                             )}
                                             {modelData.bounds && (
                                                 <Pedestal
@@ -410,60 +408,58 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
                                                     modelBounds={modelData.bounds}
                                                     line1={line1}
                                                     line2={line2}
-                                                    onMerged={(geom) => {
-                                                        setMergedGeometry(geom);
-                                                        setIsMerged(true);
-                                                    }}
+                                                    onMerged={setMergedGeometry}
                                                 />
                                             )}
                                         </group>
                                     )}
                                 </Stage>
                             </Suspense>
-
-                            <OrbitControls
-                                enablePan={false}
-                                minDistance={4}
-                                maxDistance={12}
-                                makeDefault
-                            />
+                            <OrbitControls enablePan={false} minDistance={4} maxDistance={12} makeDefault />
                         </Canvas>
 
-                        {status === 'processing' && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-md z-50">
-                                <div className="flex flex-col items-center gap-6 p-10 bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-sm text-center">
-                                    <div className="relative">
-                                        <div className="w-20 h-20 border-4 border-slate-100 border-t-primary rounded-full animate-spin" />
-                                        <Sparkles className="absolute inset-0 m-auto w-8 h-8 text-primary animate-pulse" />
+                        {/* ENGRAVING PANEL */}
+                        {uiStage === 'PEDESTAL_STUDIO' && (
+                            <div className="absolute top-8 right-8 w-full max-w-[280px] z-10">
+                                <motion.div
+                                    initial={{ opacity: 0, x: 20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    className="bg-white/80 p-6 rounded-2xl border border-slate-200 shadow-sm backdrop-blur-xl"
+                                >
+                                    <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-4">
+                                        <Type className="w-3 h-3" />
+                                        Pedestal Engraving
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={line1}
+                                        onChange={(e) => setLine1(e.target.value)}
+                                        placeholder="LINE 1 (e.g. NAME)"
+                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all mb-3 shadow-sm"
+                                    />
+                                    <input
+                                        type="text"
+                                        value={line2}
+                                        onChange={(e) => setLine2(e.target.value)}
+                                        placeholder="LINE 2 (e.g. DATE)"
+                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all shadow-sm"
+                                    />
+                                    <div className="mt-4 flex items-center gap-2 text-[10px] text-slate-400">
+                                        <Info className="w-3 h-3" />
+                                        <span>Text wraps automatically around the base.</span>
                                     </div>
-                                    <div>
-                                        <h3 className="text-xl font-semibold text-slate-800 mb-2">
-                                            {meshProgress < 30 ? "Analyzing Vision..." :
-                                                meshProgress < 60 ? "Sculpting Geometry..." :
-                                                    meshProgress < 90 ? "Finalizing 3D Blueprint..." :
-                                                        "Polishing Details..."}
-                                        </h3>
-                                        <p className="text-sm text-slate-500">
-                                            Our AI is transforming your idea into a watertight 3D model. This usually takes 45-60 seconds.
-                                        </p>
-                                    </div>
-                                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2">
-                                        <div
-                                            className="h-full bg-primary transition-all duration-700 ease-out"
-                                            style={{ width: `${meshProgress}%` }}
-                                        />
-                                    </div>
-                                    <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-full border border-slate-100">
-                                        <Gauge className="w-3 h-3 text-slate-400" />
-                                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">
-                                            Precision: 0.125mm
-                                        </span>
-                                    </div>
-                                </div>
+                                </motion.div>
                             </div>
                         )}
 
-                        {/* NEW: Dynamic Slicing UI while finalizing */}
+                        {/* TRANSITION / WAIT OVERLAY */}
+                        {isTransitioning && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-md z-50">
+                                <FunFactsLoader progress={meshProgress} />
+                            </div>
+                        )}
+
+                        {/* FINALIZING OVERLAY */}
                         {isFinalizing && (
                             <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-md z-50">
                                 <div className="flex flex-col items-center gap-6 p-10 bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-sm text-center">
@@ -475,65 +471,49 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
                                         <h3 className="text-xl font-semibold text-slate-800 mb-2">
                                             {bgJobStatus === "UPLOADING" ? "Preparing Geometry..." :
                                                 bgJobStatus === "SLICING" ? "Initializing Slicer Engine..." :
-                                                    bgJobStatus === "POLLING" ? "Generating Toolpaths & Supports..." :
-                                                        "Finalizing..."}
+                                                    bgJobStatus === "POLLING" ? "Generating Toolpaths..." : "Finalizing..."}
                                         </h3>
-                                        <p className="text-sm text-slate-500">
-                                            This complex process ensures a perfect 3D print. It usually takes about 30 seconds.
-                                        </p>
-                                    </div>
-                                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2">
-                                        <div className="h-full bg-primary transition-all duration-1000 ease-out"
-                                            style={{ width: bgJobStatus === "UPLOADING" ? "20%" : bgJobStatus === "SLICING" ? "40%" : bgJobStatus === "POLLING" ? "85%" : "100%" }} />
+                                        <p className="text-sm text-slate-500">Preparing your 3D print. Almost there.</p>
                                     </div>
                                 </div>
                             </div>
                         )}
-
-                        <div className="absolute top-8 right-8 w-full max-w-[280px]">
-                            <div className="bg-white/80 p-6 rounded-2xl border border-slate-200 shadow-sm backdrop-blur-xl">
-                                <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-4">
-                                    <Type className="w-3 h-3" />
-                                    Pedestal Engraving
-                                </label>
-                                <input
-                                    type="text"
-                                    value={line1}
-                                    onChange={(e) => setLine1(e.target.value)}
-                                    placeholder="LINE 1"
-                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all mb-3 shadow-sm"
-                                />
-                                <input
-                                    type="text"
-                                    value={line2}
-                                    onChange={(e) => setLine2(e.target.value)}
-                                    placeholder="LINE 2"
-                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all shadow-sm"
-                                />
-                            </div>
-                        </div>
                     </div>
                 </div>
 
                 <div className="flex flex-col items-center gap-6 pt-6">
-                    <motion.button
-                        onClick={handleFinalize}
-                        disabled={isFinalizing || status !== 'completed' || !isMerged}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        className={`px-16 py-5 rounded-xl font-medium text-lg transition-all shadow-sm ${isFinalizing || status !== 'completed' || !isMerged
-                            ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                            : 'bg-slate-900 text-white hover:bg-slate-800 hover:shadow-md'
-                            }`}
-                    >
-                        {isFinalizing ? 'Preparing Print...' : 'Finalize Print'}
-                    </motion.button>
-                    <button
-                        onClick={onBack}
-                        className="text-slate-400 hover:text-slate-600 text-xs font-medium tracking-wide transition-all underline decoration-slate-200 underline-offset-4"
-                    >
-                        Adjust Blueprint Sentiment
-                    </button>
+                    {uiStage === 'PEDESTAL_STUDIO' ? (
+                        <motion.button
+                            onClick={handleConfirmEngraving}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            className="px-16 py-5 rounded-xl font-medium text-lg bg-slate-900 text-white hover:bg-slate-800 shadow-md transition-all"
+                        >
+                            Confirm Engraving
+                        </motion.button>
+                    ) : (
+                        <motion.button
+                            onClick={handleFinalize}
+                            disabled={isFinalizing || status !== 'completed' || !mergedGeometry}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            className={`px-16 py-5 rounded-xl font-medium text-lg transition-all shadow-sm ${isFinalizing || status !== 'completed' || !mergedGeometry
+                                ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                                : 'bg-slate-900 text-white hover:bg-slate-800 hover:shadow-md'
+                                }`}
+                        >
+                            {isFinalizing ? 'Preparing Print...' : 'Proceed to Checkout'}
+                        </motion.button>
+                    )}
+
+                    {uiStage === 'MODEL_PREVIEW' && (
+                        <button
+                            onClick={() => { setUiStage('PEDESTAL_STUDIO'); setMergedGeometry(null); }}
+                            className="text-slate-400 hover:text-slate-600 text-xs font-medium tracking-wide transition-all underline decoration-slate-200 underline-offset-4"
+                        >
+                            Change Engraving Text
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

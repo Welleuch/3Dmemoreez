@@ -207,6 +207,42 @@ export default {
                 });
             }
 
+            // 1.1 Warmup / Wakeup Call
+            if (url.pathname === "/api/warmup" && request.method === "POST") {
+                try {
+                    let AI_ENGINE_URL = env.RUNPOD_ENDPOINT_URL || env.AI_ENGINE_URL;
+                    if (!AI_ENGINE_URL && env.RUNPOD_ENDPOINT_ID) {
+                        AI_ENGINE_URL = `https://api.runpod.ai/v2/${env.RUNPOD_ENDPOINT_ID}/run`;
+                    }
+                    AI_ENGINE_URL = AI_ENGINE_URL || "http://127.0.0.1:8000/generate-3d";
+
+                    const IS_RUNPOD = AI_ENGINE_URL.includes("api.runpod.ai");
+                    const payload = IS_RUNPOD ? { input: { wakeup: true } } : { wakeup: true };
+
+                    const headers = {
+                        "Content-Type": "application/json",
+                        "User-Agent": "Mozilla/5.0 (3Dmemoreez Warmup Agent)"
+                    };
+                    if (IS_RUNPOD && env.RUNPOD_API_KEY) {
+                        headers["Authorization"] = `Bearer ${env.RUNPOD_API_KEY}`;
+                    }
+
+                    console.log(`[API-WARMUP] Proactive ping sent to ${AI_ENGINE_URL}`);
+                    ctx.waitUntil(fetch(AI_ENGINE_URL, {
+                        method: "POST", headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(5000)
+                    }).catch(() => { }));
+
+                    return new Response(JSON.stringify({ success: true, message: "Wakeup signal transmitted" }), {
+                        headers: { ...corsHeaders, "Content-Type": "application/json" },
+                    });
+                } catch (err) {
+                    return new Response(JSON.stringify({ error: err.message }), {
+                        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+                    });
+                }
+            }
+
+
             // 2. Serve Assets from R2
             if (url.pathname.startsWith("/api/assets/") && request.method === "GET") {
                 const key = url.pathname.split("/").pop();
