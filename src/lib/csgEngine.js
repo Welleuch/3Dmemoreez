@@ -85,12 +85,20 @@ function createRoundedCylinderGeometry(radius, height, bevel, segments = 64) {
  * Generates a unified 3D printable model using CSG.
  * Ensures the pedestal is correctly positioned under the model base.
  */
-export async function createEngravedPedestalCSG(figurineMesh, _unusedBounds, line1, line2, padding = 0.35, height = 0.4) {
+export async function createEngravedPedestalCSG(figurineMesh, providedBounds, line1, line2, padding = 0.35, height = 0.4) {
     console.log("[CSG] Starting CSG Pipeline...");
 
-    // 1. Calculate Local Bounding Box for absolute accuracy
-    figurineMesh.geometry.computeBoundingBox();
-    const localBounds = figurineMesh.geometry.boundingBox;
+    // 1. Calculate / Use Bounding Box
+    let localBounds = providedBounds;
+    if (!localBounds && figurineMesh) {
+        figurineMesh.geometry.computeBoundingBox();
+        localBounds = figurineMesh.geometry.boundingBox;
+    }
+
+    if (!localBounds) {
+        throw new Error("No bounding box or figurine provided to CSG engine");
+    }
+
     const { min, max } = localBounds;
 
     const modelWidth = (max.x - min.x);
@@ -176,26 +184,30 @@ export async function createEngravedPedestalCSG(figurineMesh, _unusedBounds, lin
         }
     }
 
-    // 3. Union with Figurine
-    console.log("[CSG] Merging figurine...");
+    // 3. Union with Figurine (if available)
+    if (figurineMesh) {
+        console.log("[CSG] Merging figurine...");
+        const figurineGeom = figurineMesh.geometry.clone();
+        if (!figurineGeom.getAttribute('normal')) {
+            figurineGeom.computeVertexNormals();
+        }
 
-    // Create a clean figurine geometry clone
-    const figurineGeom = figurineMesh.geometry.clone();
-    if (!figurineGeom.getAttribute('normal')) {
-        figurineGeom.computeVertexNormals();
-    }
+        const figurineBrush = new Brush(figurineGeom);
+        figurineBrush.position.copy(figurineMesh.position);
+        figurineBrush.rotation.copy(figurineMesh.rotation);
+        figurineBrush.scale.copy(figurineMesh.scale);
+        figurineBrush.updateMatrixWorld();
 
-    const figurineBrush = new Brush(figurineGeom);
-    figurineBrush.position.copy(figurineMesh.position);
-    figurineBrush.rotation.copy(figurineMesh.rotation);
-    figurineBrush.scale.copy(figurineMesh.scale);
-    figurineBrush.updateMatrixWorld();
-
-    try {
-        const finalResult = evaluator.evaluate(resultBrush, figurineBrush, ADDITION);
-        return finalResult.geometry;
-    } catch (err) {
-        console.error("[CSG] Union failed:", err);
+        try {
+            const finalResult = evaluator.evaluate(resultBrush, figurineBrush, ADDITION);
+            return finalResult.geometry;
+        } catch (err) {
+            console.error("[CSG] Union failed:", err);
+            return resultBrush.geometry;
+        }
+    } else {
+        // Isolation mode: just return the engraved pedestal
         return resultBrush.geometry;
     }
 }
+
