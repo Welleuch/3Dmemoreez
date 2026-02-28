@@ -183,6 +183,9 @@ CREATE TABLE Sessions (
 CREATE TABLE Assets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT,
+    title TEXT,
+    type TEXT,
+    score INTEGER,
     image_url TEXT,
     status TEXT DEFAULT 'generated',   -- generated | processing | completed | failed
     stl_r2_path TEXT,
