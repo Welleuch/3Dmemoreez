@@ -136,6 +136,7 @@ export default function App() {
     const handleInputSubmit = async (data) => {
         setFormData(data);
         setIsGenerating(true);
+        setConcepts([]); // Clear previous concepts
 
         try {
             const response = await fetch(`${API_BASE_URL}/api/generate`, {
@@ -145,16 +146,59 @@ export default function App() {
             });
 
             if (!response.ok) {
-                const errData = await response.json();
+                const errData = await response.json().catch(() => ({}));
                 throw new Error(errData.error || 'Generation failed');
             }
 
-            const result = await response.json();
-            setConcepts(result.concepts);
-            setSessionId(result.session_id);
-            localStorage.setItem('3dmemoreez_session_id', result.session_id);
-            setIsGenerating(false);
-            nextStep();
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('text/event-stream')) {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const parts = buffer.split('\n\n');
+                    buffer = parts.pop(); // keep the last incomplete part
+
+                    for (const part of parts) {
+                        if (part.startsWith('data: ')) {
+                            try {
+                                const payload = JSON.parse(part.substring(6));
+                                if (payload.type === 'session') {
+                                    setSessionId(payload.session_id);
+                                    localStorage.setItem('3dmemoreez_session_id', payload.session_id);
+                                    // Move to next step immediately while concepts stream in
+                                    setCurrentStep(1);
+                                } else if (payload.type === 'concept') {
+                                    setConcepts(prev => {
+                                        // avoid duplicates in case of strict mode or retries
+                                        if (prev.find(c => c.id === payload.concept.id)) return prev;
+                                        return [...prev, payload.concept];
+                                    });
+                                } else if (payload.type === 'error') {
+                                    throw new Error(payload.message);
+                                } else if (payload.type === 'done') {
+                                    setIsGenerating(false);
+                                }
+                            } catch (e) {
+                                console.error('SSE Parse Error:', e);
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Fallback for non-streaming response
+                const result = await response.json();
+                setConcepts(result.concepts);
+                setSessionId(result.session_id);
+                localStorage.setItem('3dmemoreez_session_id', result.session_id);
+                setIsGenerating(false);
+                nextStep();
+            }
         } catch (error) {
             console.error('Generation Error:', error);
             setIsGenerating(false);
@@ -170,16 +214,52 @@ export default function App() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     hobbies: formData.hobbies,
-                    session_id: sessionId // Pass session ID to potentially influence variety or storage
+                    session_id: sessionId
                 })
             });
 
             if (!response.ok) throw new Error('Generation failed');
 
-            const result = await response.json();
-            // Append new concepts to the existing ones
-            setConcepts(prev => [...prev, ...result.concepts]);
-            setIsGenerating(false);
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('text/event-stream')) {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const parts = buffer.split('\n\n');
+                    buffer = parts.pop();
+
+                    for (const part of parts) {
+                        if (part.startsWith('data: ')) {
+                            try {
+                                const payload = JSON.parse(part.substring(6));
+                                if (payload.type === 'concept') {
+                                    setConcepts(prev => {
+                                        if (prev.find(c => c.id === payload.concept.id)) return prev;
+                                        return [...prev, payload.concept];
+                                    });
+                                } else if (payload.type === 'error') {
+                                    throw new Error(payload.message);
+                                } else if (payload.type === 'done') {
+                                    setIsGenerating(false);
+                                }
+                            } catch (e) { }
+                        }
+                    }
+                }
+            } else {
+                const result = await response.json();
+                setConcepts(prev => {
+                    const newConcepts = result.concepts.filter(c => !prev.find(p => p.id === c.id));
+                    return [...prev, ...newConcepts];
+                });
+                setIsGenerating(false);
+            }
         } catch (error) {
             console.error('More Generation Error:', error);
             setIsGenerating(false);

@@ -85,8 +85,11 @@ function createRoundedCylinderGeometry(radius, height, bevel, segments = 64) {
  * Generates a unified 3D printable model using CSG.
  * Ensures the pedestal is correctly positioned under the model base.
  */
+/**
+ * Generates only the engraved pedestal part. Used for live configuration UI.
+ */
 export async function createEngravedPedestalCSG(figurineMesh, providedBounds, line1, line2, padding = 0.35, height = 0.4) {
-    console.log("[CSG] Starting CSG Pipeline...");
+    console.log("[CSG] Generating Pedestal for config...");
 
     // 1. Calculate / Use Bounding Box
     let localBounds = providedBounds;
@@ -105,19 +108,15 @@ export async function createEngravedPedestalCSG(figurineMesh, providedBounds, li
     const modelDepth = (max.z - min.z);
 
     const radius = Math.max(modelWidth, modelDepth) / 2 + padding;
-    const bevel = 0.05; // 0.5mm safe rounding
+    const bevel = 0.05;
 
-    // Using custom Rounded Cylinder for premium, safe look
     const pedestalGeom = createRoundedCylinderGeometry(radius, height, bevel, 64);
-
-    // Ensure pedestal has normals
     if (!pedestalGeom.getAttribute('normal')) pedestalGeom.computeVertexNormals();
 
     const pedestalBrush = new Brush(pedestalGeom);
-
     const centerX = (min.x + max.x) / 2;
     const centerZ = (min.z + max.z) / 2;
-    // POSITIONING: Top of cylinder = model bottom + 0.05 overlap
+    // Top of cylinder sits 0.05 units *above* model bottom for solid contact
     const centerY = min.y + 0.05 - (height / 2);
 
     pedestalBrush.position.set(centerX, centerY, centerZ);
@@ -129,12 +128,9 @@ export async function createEngravedPedestalCSG(figurineMesh, providedBounds, li
     if (line1 || line2) {
         try {
             const font = await loadFont();
-            // In a cylinder, the front face is 'radius' away from center
-            const frontFaceZ = centerZ + radius;
-
             const createTextBrush = (text, size, yOffset) => {
                 if (!text || text.trim() === "") return null;
-                const textThickness = 0.06; // Shallow but clear definition
+                const textThickness = 0.06;
                 const textGeom = new TextGeometry(text, {
                     font: font,
                     size: size,
@@ -142,28 +138,21 @@ export async function createEngravedPedestalCSG(figurineMesh, providedBounds, li
                     curveSegments: 8,
                 });
 
-                // 1. Center the geometry horizontally first so x=0 is the center of the word
                 textGeom.computeBoundingBox();
                 const textCenter = new THREE.Vector3();
                 textGeom.boundingBox.getCenter(textCenter);
-                textGeom.translate(-textCenter.x, -textCenter.y, 0); // Center both X and Y
+                textGeom.translate(-textCenter.x, -textCenter.y, 0);
 
-                // 2. Wrap it around the cylinder curve
-                // We sink it exactly 0.04 units (approx 0.4mm - one nozzle diameter)
-                // z in [-0.04, 0.02] relative to radius
                 textGeom.translate(0, 0, -0.04);
                 wrapGeometry(textGeom, radius);
 
                 const brush = new Brush(textGeom);
-                // Position brush at pedestal center
-                // Since we already centered textGeom on Y, we just offset by yOffset
                 brush.position.set(centerX, centerY + yOffset, centerZ);
                 brush.updateMatrixWorld();
                 return brush;
             };
 
             const fontSize1 = Math.min(height * 0.35, radius * 0.2);
-            // Increased vertical separation (yOffset)
             if (line1) {
                 const b1 = createTextBrush(line1, fontSize1, height * 0.22);
                 if (b1) {
@@ -184,30 +173,39 @@ export async function createEngravedPedestalCSG(figurineMesh, providedBounds, li
         }
     }
 
-    // 3. Union with Figurine (if available)
-    if (figurineMesh) {
-        console.log("[CSG] Merging figurine...");
-        const figurineGeom = figurineMesh.geometry.clone();
-        if (!figurineGeom.getAttribute('normal')) {
-            figurineGeom.computeVertexNormals();
-        }
+    return resultBrush.geometry;
+}
 
-        const figurineBrush = new Brush(figurineGeom);
-        figurineBrush.position.copy(figurineMesh.position);
-        figurineBrush.rotation.copy(figurineMesh.rotation);
-        figurineBrush.scale.copy(figurineMesh.scale);
-        figurineBrush.updateMatrixWorld();
+/**
+ * Merges a figurine and a pedestal into a single monolithic 3D printable mass.
+ */
+export async function createUnionCSG(figurineMesh, pedestalGeometry) {
+    if (!figurineMesh || !pedestalGeometry) {
+        throw new Error("Missing mesh for union");
+    }
 
-        try {
-            const finalResult = evaluator.evaluate(resultBrush, figurineBrush, ADDITION);
-            return finalResult.geometry;
-        } catch (err) {
-            console.error("[CSG] Union failed:", err);
-            return resultBrush.geometry;
-        }
-    } else {
-        // Isolation mode: just return the engraved pedestal
-        return resultBrush.geometry;
+    // Capture clean geometries
+    const figurineGeom = figurineMesh.geometry.clone();
+    if (!figurineGeom.getAttribute('normal')) figurineGeom.computeVertexNormals();
+
+    const figurineBrush = new Brush(figurineGeom);
+    // Explicitly set figurine at its "grounded" position (Y=0 relative to its base)
+    // We ignore the landing animation position for the export
+    figurineBrush.position.set(0, 0, 0);
+    figurineBrush.updateMatrixWorld();
+
+    const pedestalBrush = new Brush(pedestalGeometry);
+    // Pedestal already has its calculated offset relative to 0,0,0 figurine base
+    pedestalBrush.position.set(0, 0, 0);
+    pedestalBrush.updateMatrixWorld();
+
+    try {
+        const finalResult = evaluator.evaluate(figurineBrush, pedestalBrush, ADDITION);
+        return finalResult.geometry;
+    } catch (err) {
+        console.error("[CSG] Union failed:", err);
+        return figurineGeom;
     }
 }
+
 

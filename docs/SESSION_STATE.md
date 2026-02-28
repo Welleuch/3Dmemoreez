@@ -25,9 +25,9 @@ Attempted to restore the "blink-of-an-eye" AI generation speed for the initial i
 
 ## ⚠️ Known Limitations / Open Issues
 
-### Issue 1 — Cloudflare AI Generation Timeout
-**Problem:** The `Promise.allSettled()` block that triggers 4 parallel Flux generations is still intermittently taking over 120 seconds, causing Cloudflare Workers to terminate the request with a `500` timeout. "Explore More" is often subjectively slower than older versions of the app.
-**Status:** Requires a massive architecture change (e.g., streaming responses, moving generation off-worker, or abandoning parallel generation for queue-based generation).
+### Issue 1 — Cloudflare AI Generation Timeout (RESOLVED ✅)
+**Problem:** The `Promise.allSettled()` block targeting 4 parallel Flux generations intermittently exceeded 120 seconds, causing timeouts and killing the UI response.
+**Status:** **Resolved.** Re-architected `/api/generate` to return a Server-Sent Events (SSE) `TransformStream` via `ctx.waitUntil`. By streaming the `session_id` back immediately and streaming the images as soon as they parallel-complete, we bypassed the harsh HTTP blocking timeouts and vastly improved the subjective perceived wait time. Frontend now smoothly updates the UI with placeholders and fills in the concepts incrementally!
 
 ### Issue 2 — Resend Sandbox
 **Problem:** Emails only deliver to the owner (`walid.elleuch@outlook.de`) until the domain `3dmemoreez.com` is verified.
@@ -47,9 +47,9 @@ Attempted to restore the "blink-of-an-eye" AI generation speed for the initial i
 ## 🚀 Next Steps (Priority Order)
 
 ### 🔴 Priority 1 — Solve Slow Image Generation Catastrophe
-- [ ] Completely rethink the `generate` endpoint in the Cloudflare Worker.
-- [ ] Investigate if we should switch to Server-Sent Events (SSE) stream returning images 1-by-1 as they load instead of waiting for all 4.
-- [ ] Profile the exact time Llama takes vs Flux takes.
+- [x] Completely rethink the `generate` endpoint in the Cloudflare Worker.
+- [x] Investigate if we should switch to Server-Sent Events (SSE) stream returning images 1-by-1 as they load instead of waiting for all 4.
+- [x] Implemented Fetch-based SSE parsing in frontend to conditionally render loading skeletons while images complete.
 
 ### 🟡 Priority 2 — Analytics & UX
 - [ ] Implement post-payment conversion tracking.

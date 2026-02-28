@@ -15,7 +15,7 @@ const API_BASE_URL = window.location.hostname === 'localhost' || window.location
     ? 'http://127.0.0.1:8787'
     : 'https://3d-memoreez-orchestrator.walid-elleuch.workers.dev';
 
-import { createEngravedPedestalCSG } from '../lib/csgEngine';
+import { createEngravedPedestalCSG, createUnionCSG } from '../lib/csgEngine';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter';
 
 // --- CONFIG & CONSTANTS ---
@@ -123,7 +123,7 @@ function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged, isolationMod
                 const p = Math.max(0.35, size.x * 0.12);
 
                 const csgGeom = await createEngravedPedestalCSG(
-                    isolationMode ? null : modelMesh,
+                    null, // Pass null to ONLY get the pedestal part
                     localBounds,
                     line1,
                     line2,
@@ -144,7 +144,7 @@ function Pedestal({ modelMesh, modelBounds, line1, line2, onMerged, isolationMod
 
         const timer = setTimeout(init, 300);
         return () => { active = false; clearTimeout(timer); };
-    }, [modelMesh, localBounds, line1, line2, isolationMode]);
+    }, [modelMesh, localBounds, line1, line2, isolationMode, onMerged]);
 
     const size = new THREE.Vector3();
     if (localBounds) localBounds.getSize(size);
@@ -285,7 +285,7 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
 
     // Background Pre-Slicing Logic
     useEffect(() => {
-        if (!mergedGeometry || !selectedConcept || uiStage !== 'MODEL_PREVIEW') return;
+        if (!mergedGeometry || !selectedConcept || !modelData.mesh || uiStage !== 'MODEL_PREVIEW') return;
 
         let isMounted = true;
         let pollInterval = null;
@@ -293,8 +293,13 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
         const timeoutId = setTimeout(async () => {
             try {
                 setBgJobStatus("UPLOADING");
+
+                // CREATE THE ACTUAL UNION FOR PRINTING
+                console.log("[PRE-SLICE] Finalizing Union...");
+                const finalUnionGeom = await createUnionCSG(modelData.mesh, mergedGeometry);
+
                 const exporter = new STLExporter();
-                const mesh = new THREE.Mesh(mergedGeometry, new THREE.MeshStandardMaterial());
+                const mesh = new THREE.Mesh(finalUnionGeom, new THREE.MeshStandardMaterial());
                 const stlData = exporter.parse(mesh, { binary: true });
                 const formData = new FormData();
                 formData.append("file", new Blob([stlData], { type: "model/stl" }), "final_merged.stl");
@@ -344,7 +349,8 @@ export default function ThreeSceneViewer({ selectedConcept, sessionId, line1, se
         }, 1500);
 
         return () => { isMounted = false; clearTimeout(timeoutId); if (pollInterval) clearInterval(pollInterval); };
-    }, [mergedGeometry, selectedConcept?.id, sessionId, uiStage]);
+    }, [mergedGeometry, selectedConcept?.id, sessionId, uiStage, modelData.mesh]);
+
 
     const handleFinalize = async () => {
         if (!mergedGeometry) return;

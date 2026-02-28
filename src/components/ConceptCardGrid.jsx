@@ -83,6 +83,29 @@ export default function ConceptCardGrid({ concepts, onSelect, onBack, onGenerate
                         </div>
                     </motion.div>
                 ))}
+
+                {/* Loading Placeholders for Streaming Response */}
+                {isGenerating && Array.from({ length: Math.max(0, 4 - (concepts.length % 4 || (concepts.length === 0 ? 0 : 4))) }).map((_, idx) => (
+                    <motion.div
+                        key={`loading-${idx}`}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.6, delay: idx * 0.1 }}
+                        className="group relative flex flex-col"
+                    >
+                        <div className="aspect-[4/5] object-cover rounded-3xl overflow-hidden relative shadow-sm border border-slate-200 mb-6 bg-slate-50 flex items-center justify-center">
+                            <div className="absolute inset-0 bg-slate-100/50 animate-pulse" />
+                            <div className="relative z-10 flex flex-col items-center gap-4 text-slate-400">
+                                <div className="w-8 h-8 border-4 border-slate-200 border-t-primary rounded-full animate-spin" />
+                                <span className="text-[11px] font-bold tracking-widest uppercase opacity-70">Crystallizing</span>
+                            </div>
+                        </div>
+                        <div className="px-2 flex flex-col gap-3">
+                            <div className="h-4 w-3/4 bg-slate-100 animate-pulse rounded" />
+                            <div className="h-3 w-1/2 bg-slate-50 animate-pulse rounded" />
+                        </div>
+                    </motion.div>
+                ))}
             </div>
 
             <div className="flex flex-col md:flex-row gap-6 justify-center items-center py-20 border-t border-slate-100 mt-12">
